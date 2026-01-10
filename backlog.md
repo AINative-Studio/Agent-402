@@ -1,166 +1,307 @@
-## Epic 1 — Public Projects API (Create/List) ✅
-
-**Goal:** Developers can create a project and list projects reliably using `X-API-Key`.
-
-### User Stories
-
-1. **(2 pts)** As a developer, I can **create a project** via `POST /v1/public/projects` with `name, description, tier, database_enabled`.
-2. **(2 pts)** As a developer, I can **list my projects** via `GET /v1/public/projects` and see `id/name/status/tier`.
-3. **(2 pts)** As a developer, I receive **tier validation errors** (`INVALID_TIER`) with clear messages.
-4. **(2 pts)** As a developer, I receive **project limit errors** (`PROJECT_LIMIT_EXCEEDED`) with clear messages.
-5. **(1 pt)** As a developer, I can see **status ACTIVE** in project responses consistently.
+# 📚 Final Backlog — PRD-Aligned (Source of Truth)
 
 ---
 
-## Epic 2 — Auth & Request Consistency (API Key + Optional JWT)
+## Epic 1 — Public Projects API (Create & List)
 
-**Goal:** Requests consistently authenticate and failures are uniform.
+**PRD Alignment:** §6 ZeroDB Integration, §9 Deliverables
+
+**Goal:** Developers can create and list projects reliably using `X-API-Key`.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can authenticate all public endpoints using **`X-API-Key`**.
-2. **(2 pts)** As a developer, invalid API keys return **401 with `INVALID_API_KEY`** consistently.
-3. **(1 pt)** As a developer, errors include **`detail`** consistently across endpoints.
-4. **(2 pts)** As a developer, I can optionally login via `POST /v1/public/auth/login` and use **Bearer JWT**.
-5. **(1 pt)** As a developer, docs clearly warn **never use API keys client-side**.
+1. **(2 pts)** As a developer, I can create a project via `POST /v1/public/projects` with `name, description, tier, database_enabled`.
+   → PRD §6 (ZeroDB collections require project scoping)
+
+2. **(2 pts)** As a developer, I can list my projects via `GET /v1/public/projects` and see `id, name, status, tier`.
+   → PRD §9 (Demo setup must be deterministic)
+
+3. **(2 pts)** As a developer, I receive tier validation errors (`INVALID_TIER`) with clear messages.
+   → PRD §10 (Demo must fail loudly and clearly)
+
+4. **(2 pts)** As a developer, I receive project limit errors (`PROJECT_LIMIT_EXCEEDED`) with clear messages.
+   → PRD §12 (Infrastructure credibility)
+
+5. **(1 pt)** As a developer, project responses consistently show `status: ACTIVE`.
+   → PRD §9 (Stable demo expectations)
 
 ---
 
-## Epic 3 — Embeddings: Generate (Multi-dimension)
+## Epic 2 — Auth & Request Consistency
 
-**Goal:** Generate embeddings reliably with a default model and optional model selection.
+**PRD Alignment:** §10 Success Criteria, §12 Strategic Positioning
+
+**Goal:** All requests authenticate consistently and predictably.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can generate embeddings using `POST /v1/public/{project_id}/embeddings/generate` with `texts[]`.
-2. **(2 pts)** As a developer, the API defaults to **384-dim** embeddings when `model` is omitted.
-3. **(2 pts)** As a developer, I can set `model` to `bge-small/base/large` and receive correct `dimensions`.
-4. **(2 pts)** As a developer, I receive **MODEL_NOT_FOUND** when I pass an unsupported model.
-5. **(1 pt)** As a developer, I can see `processing_time_ms` in responses for debugging.
+1. **(2 pts)** As a developer, I can authenticate all public endpoints using `X-API-Key`.
+   → PRD §10 (Signed requests + auditability)
+
+2. **(2 pts)** As a developer, invalid API keys return `401 INVALID_API_KEY`.
+   → PRD §10 (Clear failure modes)
+
+3. **(1 pt)** As a developer, all errors include a `detail` field.
+   → PRD §10 (Replay + explainability)
+
+4. **(2 pts)** As a developer, I can optionally authenticate via JWT using `POST /v1/public/auth/login`.
+   → PRD §12 (Future extensibility, not required for MVP)
+
+5. **(1 pt)** As a developer, docs clearly warn not to use API keys client-side.
+   → PRD §12 (Fintech credibility)
 
 ---
 
-## Epic 4 — Embeddings: Embed and Store
+## Epic 3 — Embeddings: Generate
 
-**Goal:** Store documents + vectors with namespaces and upsert behavior.
+**PRD Alignment:** §6 ZeroDB Integration
+
+**Goal:** Generate embeddings reliably with deterministic defaults.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can embed+store documents using `POST /v1/public/{project_id}/embeddings/embed-and-store`.
-2. **(2 pts)** As a developer, I can specify `namespace` and it scopes retrieval properly.
-3. **(2 pts)** As a developer, `upsert: true` updates existing IDs without creating duplicates.
-4. **(2 pts)** As a developer, responses always include `vectors_stored`, `embeddings_generated`, `model`, `dimensions`.
-5. **(1 pt)** As a developer, docs and examples enforce **model consistency** across store and search.
+1. **(2 pts)** As a developer, I can generate embeddings via `POST /embeddings/generate`.
+   → PRD §6 (Agent memory + search)
+
+2. **(2 pts)** As a developer, the API defaults to 384-dim embeddings when `model` is omitted.
+   → PRD §10 (Determinism)
+
+3. **(2 pts)** As a developer, I can specify supported models and receive correct dimensions.
+   → PRD §12 (Extensibility)
+
+4. **(2 pts)** As a developer, unsupported models return `MODEL_NOT_FOUND`.
+   → PRD §10 (Clear failure modes)
+
+5. **(1 pt)** As a developer, responses include `processing_time_ms`.
+   → PRD §9 (Demo observability)
+
+---
+
+## Epic 4 — Embeddings: Embed & Store
+
+**PRD Alignment:** §6 ZeroDB Integration
+
+**Goal:** Store documents and vectors with namespaces and upsert behavior.
+
+### User Stories
+
+1. **(2 pts)** As a developer, I can embed and store documents via `embed-and-store`.
+   → PRD §6 (Agent memory foundation)
+
+2. **(2 pts)** As a developer, `namespace` scopes retrieval correctly.
+   → PRD §6 (Agent-scoped memory)
+
+3. **(2 pts)** As a developer, `upsert: true` updates existing IDs without duplication.
+   → PRD §10 (Replayability)
+
+4. **(2 pts)** As a developer, responses include vectors stored, model, and dimensions.
+   → PRD §9 (Demo proof)
+
+5. **(1 pt)** As a developer, docs enforce model consistency across store and search.
+   → PRD §10 (Determinism)
 
 ---
 
 ## Epic 5 — Embeddings: Semantic Search
 
-**Goal:** Search with top_k, namespace, filters, and thresholds.
+**PRD Alignment:** §6 ZeroDB Integration
+
+**Goal:** Search memory with filters and thresholds.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can search via `POST /v1/public/{project_id}/embeddings/search` with `query`.
-2. **(2 pts)** As a developer, I can set `top_k` and receive that many results (up to max).
-3. **(2 pts)** As a developer, I can search within a `namespace` only.
-4. **(2 pts)** As a developer, I can apply `filter` over metadata fields.
-5. **(2 pts)** As a developer, I can set `similarity_threshold` to filter low-score results.
-6. **(1 pt)** As a developer, I can toggle `include_embeddings` and `include_metadata`.
+1. **(2 pts)** As a developer, I can search via `/embeddings/search`.
+   → PRD §6 (Agent recall)
+
+2. **(2 pts)** As a developer, I can limit results via `top_k`.
+   → PRD §10 (Predictable replay)
+
+3. **(2 pts)** As a developer, I can scope search by namespace.
+   → PRD §6 (Agent isolation)
+
+4. **(2 pts)** As a developer, I can filter over metadata.
+   → PRD §6 (Compliance & audit)
+
+5. **(2 pts)** As a developer, I can enforce `similarity_threshold`.
+   → PRD §10 (Explainability)
+
+6. **(1 pt)** As a developer, I can toggle metadata and embeddings in results.
+   → PRD §9 (Demo visibility)
 
 ---
 
-## Epic 6 — Vector Operations API (`/database/vectors/...`)
+## Epic 6 — Vector Operations API
 
-**Goal:** Provide direct vector upsert for advanced users and ensure `/database/` prefix correctness.
+**PRD Alignment:** §6 ZeroDB Integration
+
+**Goal:** Enable direct vector operations for advanced use cases.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can upsert a vector via `POST /v1/public/{project_id}/database/vectors/upsert`.
-2. **(2 pts)** As a developer, vector upsert enforces correct **dimension length** for the chosen model/namespace.
-3. **(2 pts)** As a developer, I receive `DIMENSION_MISMATCH` with expected vs received dimensions.
-4. **(1 pt)** As a developer, docs clearly warn that missing `/database/` causes 404.
-5. **(2 pts)** As a developer, vector upsert supports `metadata` + `namespace`.
+1. **(2 pts)** As a developer, I can upsert vectors via `/database/vectors/upsert`.
+   → PRD §6 (Low-level control)
+
+2. **(2 pts)** As a developer, dimension length is enforced strictly.
+   → PRD §10 (Determinism)
+
+3. **(2 pts)** As a developer, mismatches return `DIMENSION_MISMATCH`.
+   → PRD §10 (Clear failures)
+
+4. **(1 pt)** As a developer, docs clearly warn about missing `/database/`.
+   → PRD §10 (DX contract)
+
+5. **(2 pts)** As a developer, vector upsert supports metadata and namespace.
+   → PRD §6 (Auditability)
 
 ---
 
-## Epic 7 — Tables API (NoSQL Tables)
+## Epic 7 — Tables API (NoSQL)
 
-**Goal:** Support table creation and row insertion + listing with strict request shapes.
+**PRD Alignment:** §6 ZeroDB Integration
+
+**Goal:** Support structured, auditable data storage.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can create a table via `POST /v1/public/{project_id}/database/tables` with `name/description/schema`.
-2. **(2 pts)** As a developer, I can insert a row via `POST /v1/public/{project_id}/database/tables/{table}/rows` using **`row_data`**.
-3. **(2 pts)** As a developer, invalid row payloads return **422** with a helpful missing-field error for `row_data`.
-4. **(2 pts)** As a developer, I can list rows via `GET /v1/public/{project_id}/database/tables/{table}/rows?limit=...`.
-5. **(1 pt)** As a developer, docs clearly warn **NOT** to use `rows` or `data`.
+1. **(2 pts)** As a developer, I can create tables with schema definitions.
+   → PRD §6 (Compliance records)
+
+2. **(2 pts)** As a developer, I can insert rows using `row_data`.
+   → PRD §10 (Contract stability)
+
+3. **(2 pts)** As a developer, missing `row_data` returns a clear 422 error.
+   → PRD §10 (Deterministic errors)
+
+4. **(2 pts)** As a developer, I can list rows with pagination.
+   → PRD §9 (Demo verification)
+
+5. **(1 pt)** As a developer, docs warn against using `rows` or `data`.
+   → PRD §10 (DX contract)
 
 ---
 
-## Epic 8 — Events API (`/database/events`)
+## Epic 8 — Events API
 
-**Goal:** Developers can post analytics-style events with consistent schema.
+**PRD Alignment:** §6 ZeroDB Integration, §10 Success Criteria
+
+**Goal:** Track system and agent events consistently.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can send events via `POST /v1/public/{project_id}/database/events`.
-2. **(2 pts)** As a developer, events accept `event_type`, `data`, and `timestamp`.
-3. **(2 pts)** As a developer, timestamp validation errors are clear and actionable.
+1. **(2 pts)** As a developer, I can post events via `/database/events`.
+   → PRD §6 (Audit trail)
+
+2. **(2 pts)** As a developer, events accept `event_type, data, timestamp`.
+   → PRD §10 (Replayability)
+
+3. **(2 pts)** As a developer, invalid timestamps return clear errors.
+   → PRD §10 (Determinism)
+
 4. **(1 pt)** As a developer, event writes return a stable success response.
+   → PRD §9 (Demo clarity)
+
+5. **(1 pt)** As an agent system, I can emit agent lifecycle events (`agent_decision`, `agent_tool_call`).
+   → PRD §5 (Agent personas)
 
 ---
 
-## Epic 9 — Error Codes, Response Shapes, and Consistency Layer
+## Epic 9 — Error & Response Consistency
 
-**Goal:** One predictable API experience across all endpoints.
+**PRD Alignment:** §10 Success Criteria
+
+**Goal:** One predictable API surface.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, all errors return `{ detail, error_code }` when applicable.
-2. **(2 pts)** As a developer, 404s are clearly distinguishable between wrong path vs missing resource.
-3. **(2 pts)** As a developer, validation errors (422) always show `loc/msg/type`.
-4. **(1 pt)** As a developer, docs list the **top 10 most common errors** with fixes.
+1. **(2 pts)** As a developer, errors return `{ detail, error_code }`.
+   → PRD §10
+
+2. **(2 pts)** As a developer, 404s distinguish path vs resource errors.
+   → PRD §10
+
+3. **(2 pts)** As a developer, validation errors include `loc/msg/type`.
+   → PRD §10
+
+4. **(1 pt)** As a developer, docs list top 10 common errors with fixes.
+   → PRD §9
 
 ---
 
-## Epic 10 — Docs System: Copy/Paste Safety + Single Source of Truth
+## Epic 10 — Docs System & DX Contract
 
-**Goal:** The guide is always correct, consistent, and matches production.
+**PRD Alignment:** §9 Deliverables, §12 Strategic Positioning
+
+**Goal:** Docs are executable and authoritative.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, every snippet uses the same variables: `API_KEY`, `PROJECT_ID`, `BASE_URL`.
-2. **(2 pts)** As a developer, the guide includes a **canonical endpoint list** (only endpoints verified).
-3. **(2 pts)** As a developer, every endpoint includes **method + path + minimal example**.
-4. **(2 pts)** As a developer, “Critical Requirements” are enforced throughout examples (384 default, /database/, row_data).
-5. **(2 pts)** As a developer, docs remove claims like “40+ endpoints” unless the endpoints are enumerated.
+1. **(2 pts)** As a developer, all examples use `API_KEY`, `PROJECT_ID`, `BASE_URL`.
+   → PRD §9
+
+2. **(2 pts)** As a developer, only verified endpoints appear in docs.
+   → PRD §12
+
+3. **(2 pts)** As a developer, every endpoint has a minimal copy-paste example.
+   → PRD §9
+
+4. **(2 pts)** As a developer, critical requirements are enforced everywhere.
+   → PRD §10
+
+5. **(2 pts)** As a maintainer, a public **ZeroDB DX Contract** documents all invariants.
+   → PRD §10, §12
 
 ---
 
-## Epic 11 — Integration Tests + Smoke Harness (Docs Verification)
+## Epic 11 — Integration Tests & Smoke Harness
 
-**Goal:** Every example in the guide is executable in CI against staging/prod.
+**PRD Alignment:** §10 Success Criteria, §9 Deliverables
+
+**Goal:** Behavior is continuously verified.
 
 ### User Stories
 
-1. **(3 pts)** As a maintainer, I have a **smoke test script** that runs: create project → embed+store → search → create table → insert row → post event.
-2. **(2 pts)** As a maintainer, tests validate **dimension consistency** for embedding models.
-3. **(2 pts)** As a maintainer, tests verify `/database/` vector paths and fail loudly if missing.
-4. **(2 pts)** As a maintainer, tests verify 422 behavior for missing `row_data`.
-5. **(2 pts)** As a maintainer, tests run in CI with secrets stored safely (no keys committed).
+1. **(3 pts)** As a maintainer, a smoke test runs: project → embed → search → table → row → event.
+   → PRD §10
+
+2. **(2 pts)** As a maintainer, tests validate embedding dimension consistency.
+   → PRD §10
+
+3. **(2 pts)** As a maintainer, tests fail loudly on missing `/database/`.
+   → PRD §10
+
+4. **(2 pts)** As a maintainer, tests validate 422 for missing `row_data`.
+   → PRD §10
+
+5. **(2 pts)** As a maintainer, smoke tests verify agent memory write + replay.
+   → PRD §10
 
 ---
 
-## Epic 12 — “AINative Aligned” SDK Helpers (Optional but huge DX win)
+## Epic 12 — Agent-Native & CrewAI Integration (MVP-Critical)
 
-**Goal:** Reduce integration friction by providing thin helpers that match the docs.
+**PRD Alignment:** §5, §6, §8, §10, §11
+
+**Goal:** Make PRD claims about agents *provably true*.
 
 ### User Stories
 
-1. **(2 pts)** As a developer, I can use a minimal client wrapper that sets base URL + headers once.
-2. **(2 pts)** As a developer, I have helper methods: `create_project`, `embed_and_store`, `search`, `create_table`, `insert_row`, `track_event`.
-3. **(2 pts)** As a developer, wrappers surface friendly errors for common gotchas (row_data, /database/).
-4. **(1 pt)** As a developer, SDK examples match docs line-for-line.
+1. **(2 pts)** As a CrewAI system, I can write agent profiles (`did, role`) to `agents`.
+   → PRD §5
+
+2. **(2 pts)** As an agent, I can persist decisions to `agent_memory`.
+   → PRD §6
+
+3. **(2 pts)** As a compliance agent, I can write outcomes to `compliance_events`.
+   → PRD §6
+
+4. **(3 pts)** As a system, X402 requests are linked to the agent + task that produced them.
+   → PRD §6, §8
+
+5. **(2 pts)** As a developer, I can replay an agent run using only ZeroDB records.
+   → PRD §10, §11
+
+6. **(1 pt)** As a system, all agent records are append-only.
+   → PRD §10 (Non-repudiation)
 
 ---
 
