@@ -3,7 +3,7 @@
 ## Product Name
 
 **Autonomous Fintech Agent Crew**
-*(AINative Edition: CrewAI × X402 × ZeroDB × AIKit)*
+**(AINative Edition: CrewAI × X402 × ZeroDB × AIKit)**
 
 ---
 
@@ -11,12 +11,13 @@
 
 The goal of this MVP is to demonstrate an **auditable, agent-native fintech workflow** using autonomous AI agents that can securely discover, authenticate, and interact with financial services via the **X402 protocol**.
 
-This project showcases how **CrewAI-orchestrated agents**, combined with **cryptographically signed requests**, **persistent agent memory**, and **tool abstraction**, can form the foundation of a real-world, decentralized fintech agent system.
+This project proves that **CrewAI-orchestrated agents**, combined with **cryptographically signed requests**, **persistent agent memory**, and **standardized tool abstraction**, can form the foundation of a **real-world, decentralized fintech agent system**.
 
 This MVP is intentionally scoped for:
 
 * Hackathon demoability
 * Technical credibility
+* Reproducibility and auditability
 * Clear extensibility into real fintech infrastructure
 
 ---
@@ -30,7 +31,9 @@ Most AI agent demos today are:
 * Impossible to audit or replay
 * Unsuitable for regulated domains like fintech
 
-Without persistent memory, signed request ledgers, and compliance traceability, agent systems cannot realistically participate in financial workflows.
+Without **persistent memory**, **signed request ledgers**, and **compliance traceability**, agent systems cannot realistically participate in financial workflows.
+
+This MVP addresses that gap directly.
 
 ---
 
@@ -38,13 +41,14 @@ Without persistent memory, signed request ledgers, and compliance traceability, 
 
 This MVP delivers:
 
-* A **multi-agent CrewAI system** with defined roles
-* A **FastAPI server implementing the X402 protocol**
+* A **multi-agent CrewAI system** running locally
+* A **FastAPI server** implementing the X402 protocol
 * **DID-based request signing and verification**
-* **Persistent agent memory and audit logs** via **ZeroDB**
-* **Reusable, traceable agent tools** via **AIKit**
+* **Persistent agent memory and audit logs** via ZeroDB
+* **Reusable, traceable agent tools** via AIKit
+* **Replayable agent workflows**
 
-The result is a **provable, replayable, fintech-ready agent workflow**.
+The result is a **provable, inspectable, fintech-ready agent workflow**.
 
 ---
 
@@ -52,11 +56,11 @@ The result is a **provable, replayable, fintech-ready agent workflow**.
 
 ### What Stays the Same (Core Design)
 
-The following are intentionally **unchanged** to preserve scope and velocity:
+The following elements are intentionally unchanged to preserve scope and velocity:
 
-* **CrewAI** agent orchestration
-* **X402 Protocol** usage and semantics
-* FastAPI server with:
+* CrewAI agent orchestration (open-source, local runtime)
+* X402 protocol usage and semantics
+* FastAPI server exposing:
 
   * `/.well-known/x402`
   * `/x402` signed POST endpoint
@@ -68,7 +72,7 @@ The following are intentionally **unchanged** to preserve scope and velocity:
   * Transaction execution
 * Single-command demo execution
 
-AINative **augments** this system — it does not replace or complicate it.
+**AINative augments this system — it does not replace or complicate it.**
 
 ---
 
@@ -78,18 +82,41 @@ AINative **augments** this system — it does not replace or complicate it.
 | ----------------- | --------------- | ------------------------------------------------ |
 | Analyst Agent     | Market Analysis | Fetches mock market data and evaluates viability |
 | Compliance Agent  | Risk & KYC      | Simulates KYC/KYT checks and risk scoring        |
-| Transaction Agent | Execution       | Signs and submits X402 requests to server        |
+| Transaction Agent | Execution       | Signs and submits X402 requests to the server    |
 
 Each agent has:
 
 * A DID
-* A defined task scope
+* A clearly defined task scope
 * Access to shared AIKit tools
-* Persistent memory in ZeroDB
+* **Persistent memory stored in ZeroDB**
+* **Local CrewAI execution for reproducibility**
 
 ---
 
-## 6. ZeroDB Integration (Core MVP Upgrade)
+## 6. CrewAI Runtime Integration (Explicit MVP Requirement)
+
+### Local-First Execution
+
+CrewAI **must run locally** as part of the MVP. This ensures:
+
+* Deterministic demos
+* Reproducible workflows
+* Debuggable agent behavior
+* CI-compatible testing
+
+CrewAI is treated as a **runtime dependency**, not a hosted service.
+
+### CrewAI Responsibilities
+
+* Agent orchestration
+* Task sequencing
+* Tool invocation
+* Passing structured outputs to ZeroDB
+
+---
+
+## 7. ZeroDB Integration (Core MVP Upgrade)
 
 ### Purpose
 
@@ -99,46 +126,68 @@ ZeroDB transforms the project from a demo into a **fintech-credible backend** by
 * Signed request ledgers
 * Compliance auditability
 * Workflow replay
+* Deterministic observability
 
 ---
 
 ### ZeroDB Collections (Minimal MVP)
 
-#### Agent Profiles
+#### 1. Agent Profiles
 
 **Collection:** `agents`
 
-Stores identity and role metadata.
+Stores:
 
-#### Agent Memory
+* Agent ID
+* DID
+* Role
+* Creation metadata
+
+---
+
+#### 2. Agent Memory
 
 **Collection:** `agent_memory`
 
 Stores:
 
-* Past decisions
-* Confidence scores
-* Context summaries
+* Agent ID
+* Task ID
+* Input summary
+* Output summary
+* Confidence / rationale
+* Timestamp
 
-Enables agents to improve decisions across runs.
+Enables:
+
+* Cross-run memory
+* Decision improvement
+* Replay
 
 ---
 
-#### Compliance Events
+#### 3. Compliance Events
 
 **Collection:** `compliance_events`
 
 Stores:
 
-* KYC/KYT results
-* Risk scores
-* Pass/fail outcomes
+* Agent ID
+* Subject
+* Risk score
+* Pass / fail
+* Reason
+* Timestamp
 
-Supports audit and explainability.
+Supports:
+
+* Audit
+* Explainability
+* Regulated workflows
 
 ---
 
-#### X402 Request Ledger
+#### 4. X402 Request Ledger
 
 **Collection:** `x402_requests`
 
@@ -148,17 +197,18 @@ Stores immutable records of:
 * Signature
 * Payload
 * Verification result
+* Server response
 * Timestamp
 
-This ledger is critical for **non-repudiation** and demo credibility.
+This ledger provides **non-repudiation** and is central to demo credibility.
 
 ---
 
-## 7. AIKit Integration (MVP Scope)
+## 8. AIKit Integration (MVP Scope)
 
 ### Purpose
 
-AIKit standardizes agent tooling and execution while keeping the system lightweight.
+AIKit standardizes agent tooling while keeping the system lightweight and portable.
 
 ---
 
@@ -174,11 +224,11 @@ AIKit.Tool(
 )
 ```
 
-**Benefits:**
+### Benefits
 
 * Shared across all agents
 * Automatically traced and logged
-* Swappable backend (mock → real fintech API)
+* Backend-swappable (mock → real fintech API)
 * Portable across CLI, server, or future UI
 
 ---
@@ -191,26 +241,18 @@ AIKit.Tool(
 
 ---
 
-## 8. System Architecture (MVP)
-
-![Image](https://admin.bentoml.com/uploads/crewai_bentoml_diagram_b9a2e1246a.png)
-
-![Image](https://cdn.prod.website-files.com/64b7ba4dc9375b7b74b2135e/685a9e61ef3301306098c846_1.webp)
-
-![Image](https://www.falkordb.com/wp-content/uploads/elementor/thumbs/AI-Agents-Architecture-by-falkordb-qwm0qxz4ufo0rgq34ti2jh09fp4771feaxtkfmld3o.webp)
-
-![Image](https://media.geeksforgeeks.org/wp-content/uploads/20250722125643748319/ai_agent_memory-.webp)
+## 9. System Architecture (MVP)
 
 ```
 +------------------------------+
 |        CrewAI Agents         |
 |------------------------------|
 | analyst                      |
-| compliance_officer           |
+| compliance_agent             |
 | transaction_agent            |
 |------------------------------|
 | Tools                        |
-| - AIKit X402 Tool            |
+| - AIKit x402.request         |
 | - Market Data Tool           |
 +--------------+---------------+
                |
@@ -229,18 +271,18 @@ AIKit.Tool(
 +------------------------------+
 |           ZeroDB             |
 |------------------------------|
+| agents                       |
 | agent_memory                 |
 | compliance_events            |
 | x402_requests (ledger)       |
-| transactions                 |
 +------------------------------+
 ```
 
 ---
 
-## 9. Deliverables (MVP)
+## 10. Deliverables (MVP)
 
-* ✅ CrewAI project with agents & tasks
+* ✅ CrewAI project with agents & tasks (local runtime)
 * ✅ FastAPI X402 server
 * ✅ ZeroDB schema with minimal collections
 * ✅ AIKit `x402.request` tool
@@ -249,11 +291,27 @@ AIKit.Tool(
 
   * Verified DID
   * Stored signed request
-  * Replayable agent flow
+  * Replayable agent workflow
 
 ---
 
-## 10. Success Criteria
+## 11. Testing & Verification (MVP)
+
+### Exact Smoke Test (Required)
+
+A single script must:
+
+1. Run the full agent workflow
+2. Persist memory to ZeroDB
+3. Verify X402 signature
+4. Write to the request ledger
+5. Replay the workflow deterministically
+
+If documented behavior changes, the smoke test **must fail**.
+
+---
+
+## 12. Success Criteria
 
 This MVP is successful if:
 
@@ -262,10 +320,11 @@ This MVP is successful if:
 * Compliance results are auditable
 * Full agent workflow can be replayed
 * Demo runs cleanly in under 5 minutes
+* Behavior matches documented defaults exactly
 
 ---
 
-## 11. Strategic Positioning
+## 13. Strategic Positioning
 
 This MVP demonstrates:
 
@@ -280,18 +339,19 @@ It positions AINative as foundational infrastructure for:
 
 ---
 
-## 12. Build Guidance (Intentional Constraints)
+## 14. Build Guidance (Intentional Constraints)
 
-* Do **not** overbuild
-* Use **minimal ZeroDB collections**
-* Implement **only one AIKit tool**
+* Do not overbuild
+* Use minimal ZeroDB collections
+* Implement only one AIKit tool
 * Optimize for clarity, not completeness
+* Treat documentation as a contract
 
 ---
 
-### Final Framing (Judges & Investors)
+## Final Framing (Judges & Investors)
 
-> “We didn’t build a demo.
-> We built the minimum viable foundation for agent-native finance.”
+> **“We didn’t build a demo.
+> We built the minimum viable foundation for agent-native finance.”**
 
 ---
