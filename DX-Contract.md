@@ -165,5 +165,3 @@ This contract governs **behavior**, not outcomes.
 
 ---
 
-
-Just say the word.
