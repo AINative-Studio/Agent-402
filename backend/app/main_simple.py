@@ -5,11 +5,14 @@ Implements ZeroDB-compliant API server per PRD and DX Contract.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.errors import APIError, format_error_response
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 from app.api.embeddings import router as embeddings_router
+from app.api.vectors import router as vectors_router
 from app.api.events import router as events_router
 from app.api.agent_memory import router as agent_memory_router
 from app.api.x402_requests import router as x402_requests_router
@@ -53,6 +56,43 @@ async def api_error_handler(request: Request, exc: APIError):
     )
 
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """
+    Handle Starlette/FastAPI HTTPException with DX Contract error format.
+    Epic 11 Story 3: Ensures 404 errors include error_code.
+    Per DX Contract Section 4.1: ALL errors return {detail, error_code}.
+
+    Note: FastAPI uses Starlette's HTTPException for route not found (404).
+    This handler catches both FastAPI and Starlette HTTPExceptions.
+    """
+    # Extract error_code if available, otherwise derive from status
+    error_code = getattr(exc, 'error_code', None)
+    if not error_code:
+        error_codes = {
+            400: "BAD_REQUEST",
+            401: "UNAUTHORIZED",
+            403: "FORBIDDEN",
+            404: "NOT_FOUND",
+            405: "METHOD_NOT_ALLOWED",
+            409: "CONFLICT",
+            422: "VALIDATION_ERROR",
+            429: "RATE_LIMIT_EXCEEDED",
+            500: "INTERNAL_SERVER_ERROR",
+            502: "BAD_GATEWAY",
+            503: "SERVICE_UNAVAILABLE",
+            504: "GATEWAY_TIMEOUT"
+        }
+        error_code = error_codes.get(exc.status_code, "HTTP_ERROR")
+
+    detail = str(exc.detail) if exc.detail else "An error occurred"
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=format_error_response(error_code, detail)
+    )
+
+
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """
@@ -88,6 +128,7 @@ async def health_check():
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(embeddings_router)
+app.include_router(vectors_router)
 app.include_router(events_router)
 app.include_router(agent_memory_router)
 app.include_router(x402_requests_router)
