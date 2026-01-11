@@ -240,6 +240,80 @@ class DuplicateAgentDIDError(APIError):
         )
 
 
+class TableAlreadyExistsError(APIError):
+    """
+    Raised when attempting to create a table with a duplicate name in a project.
+
+    Epic 7 Issue 1: Table creation with schema definitions.
+
+    Returns:
+        - HTTP 409 (Conflict)
+        - error_code: TABLE_ALREADY_EXISTS
+        - detail: Message about duplicate table name
+    """
+
+    def __init__(self, table_name: str, project_id: str):
+        detail = f"Table '{table_name}' already exists in project: {project_id}"
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="TABLE_ALREADY_EXISTS",
+            detail=detail
+        )
+
+
+class TableNotFoundError(APIError):
+    """
+    Raised when table is not found.
+
+    Epic 7 Issue 1: Table creation with schema definitions.
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: TABLE_NOT_FOUND
+        - detail: Message including table ID
+    """
+
+    def __init__(self, table_id: str):
+        detail = f"Table not found: {table_id}" if table_id else "Table not found"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="TABLE_NOT_FOUND",
+            detail=detail
+        )
+
+
+class SchemaValidationError(APIError):
+    """
+    Raised when row data doesn't match the table schema.
+
+    Epic 7 Issue 2: Row insertion with schema validation.
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: SCHEMA_VALIDATION_ERROR
+        - detail: Message about schema validation failure
+    """
+
+    def __init__(
+        self,
+        detail: str = "Row data does not match table schema",
+        validation_errors: Optional[list] = None
+    ):
+        """
+        Initialize SchemaValidationError.
+
+        Args:
+            detail: Human-readable error message
+            validation_errors: Optional list of validation error details
+        """
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="SCHEMA_VALIDATION_ERROR",
+            detail=detail
+        )
+        self.validation_errors = validation_errors or []
+
+
 class ImmutableRecordError(APIError):
     """
     Raised when an attempt is made to update or delete an immutable record.
@@ -287,6 +361,52 @@ class ImmutableRecordError(APIError):
         )
         self.table_name = table_name
         self.operation = operation
+
+
+class MissingRowDataError(APIError):
+    """
+    Raised when POST to /tables/{table_id}/rows is missing row_data field.
+
+    Epic 7 Issue 3: Deterministic errors for missing row_data.
+    PRD Section 10: Deterministic errors
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: MISSING_ROW_DATA
+        - detail: Message explaining the required field
+    """
+
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="MISSING_ROW_DATA",
+            detail="Missing required field: row_data. Use row_data instead of 'data' or 'rows'."
+        )
+
+
+class InvalidFieldNameError(APIError):
+    """
+    Raised when request contains invalid field names instead of row_data.
+
+    Epic 7 Issue 3: Deterministic errors for common field name mistakes.
+    PRD Section 10: Deterministic errors
+
+    Common mistakes detected: 'data', 'rows', 'items', 'records'
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: INVALID_FIELD_NAME
+        - detail: Message explaining the correct field name
+    """
+
+    def __init__(self, field_name: str):
+        detail = f"Invalid field '{field_name}'. Use 'row_data' for inserting rows."
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="INVALID_FIELD_NAME",
+            detail=detail
+        )
+        self.field_name = field_name
 
 
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:

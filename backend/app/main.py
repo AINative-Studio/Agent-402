@@ -39,6 +39,10 @@ from app.api.agent_memory import router as agent_memory_router
 from app.api.x402_requests import router as x402_requests_router
 # Epic 12 Issue 5: Agent run replay from ZeroDB records
 from app.api.runs import router as runs_router
+# Epic 7 Issue 1: Table creation with schema definitions
+from app.api.tables import router as tables_router
+# Epic 7 Issue 4: Row pagination and retrieval
+from app.api.rows import router as rows_router
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -130,6 +134,8 @@ app.include_router(agents_router)
 app.include_router(agent_memory_router)
 app.include_router(x402_requests_router)
 app.include_router(runs_router)
+app.include_router(tables_router)
+app.include_router(rows_router)
 
 
 # Root endpoint
