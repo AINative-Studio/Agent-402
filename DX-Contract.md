@@ -69,11 +69,31 @@ If your code follows this contract, **ZeroDB will not silently break it**.
 
 ### 4. Endpoint Prefixing
 
-* All vector and database operations **require** the `/database/` prefix
-* Missing `/database/` will always return:
+* **CRITICAL:** All vector and database operations **require** the `/database/` prefix
 
+  ```
+  ✅ CORRECT:   /v1/public/database/vectors/upsert
+  ❌ INCORRECT: /v1/public/vectors/upsert  (returns 404)
+  ```
+
+* **Operations requiring `/database/` prefix:**
+  * Vector operations: `/database/vectors/*`
+  * Table operations: `/database/tables/*`
+  * File operations: `/database/files/*`
+  * Event operations: `/database/events/*`
+
+* **Operations NOT requiring `/database/` prefix:**
+  * Projects API: `/v1/public/projects`
+  * Embeddings generation: `/v1/public/{project_id}/embeddings/generate`
+  * Embed and store: `/v1/public/{project_id}/embeddings/embed-and-store`
+  * Semantic search: `/v1/public/{project_id}/embeddings/search`
+
+* Missing `/database/` will always return:
   * `404 Not Found`
-* This behavior is permanent
+
+* This behavior is permanent and guaranteed
+
+* **See:** [DATABASE_PREFIX_WARNING.md](/docs/api/DATABASE_PREFIX_WARNING.md) for comprehensive guide
 
 ---
 

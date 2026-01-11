@@ -158,14 +158,14 @@ async def generate_embedding(
     - When `namespace` is omitted, uses 'default'
     - Metadata is optional and can be provided per document
 
-    **Response Fields:**
+    **Response Fields (Issue #19):**
     - vector_ids: List of IDs for stored vectors
-    - stored_count: Number of documents successfully stored
-    - model: Model used for embedding generation
-    - dimensions: Dimensionality of embedding vectors
+    - vectors_stored: Number of vectors successfully stored (Issue #19 - required field)
+    - model: Model used for embedding generation (Issue #19 - required field)
+    - dimensions: Dimensionality of embedding vectors (Issue #19 - required field)
     - namespace: Namespace where vectors were stored
     - results: Detailed results for each document
-    - processing_time_ms: Total processing time
+    - processing_time_ms: Total processing time (Issue #19 - included when available)
 
     **Supported Models:**
     - BAAI/bge-small-en-v1.5: 384 dimensions (default)
@@ -219,7 +219,7 @@ async def embed_and_store(
 
     return EmbedAndStoreResponse(
         vector_ids=vector_ids,
-        stored_count=len(vector_ids),
+        vectors_stored=len(vector_ids),  # Issue #19: Use vectors_stored field
         model=model_used,
         dimensions=dimensions,
         namespace=request.namespace,

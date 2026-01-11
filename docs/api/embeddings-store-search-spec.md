@@ -7,6 +7,25 @@
 
 ---
 
+## ⚠️ IMPORTANT: Vector Operations Require /database/ Prefix
+
+**For direct vector operations** (not embeddings endpoints), you MUST include the `/database/` prefix:
+
+```
+✅ CORRECT:   /v1/public/database/vectors/upsert
+❌ INCORRECT: /v1/public/vectors/upsert  (will return 404)
+```
+
+**This document covers embeddings endpoints** which do NOT require `/database/`:
+- `/v1/public/{project_id}/embeddings/embed-and-store` ✅
+- `/v1/public/{project_id}/embeddings/search` ✅
+
+**For vector operations** (Epic 6), see:
+- [DATABASE_PREFIX_WARNING.md](/docs/api/DATABASE_PREFIX_WARNING.md) - Complete guide
+- [Vector Operations API](/docs/api/vector-operations-spec.md) - API specification
+
+---
+
 ## ⚠️ CRITICAL: Model Consistency Requirement
 
 **BEFORE YOU START:** You MUST use the **SAME model** for both storing and searching documents.

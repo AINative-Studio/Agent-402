@@ -154,29 +154,30 @@ class EmbedAndStoreResponse(BaseModel):
     Response schema for POST /v1/public/{project_id}/embeddings/embed-and-store.
 
     Epic 4 Story 1 (Issue #16): Return confirmation with vector IDs and count.
+    Epic 4 Story 4 (Issue #19): Response includes vectors_stored, model, dimensions.
 
     Per PRD §6:
     - Return vector IDs for all stored documents
-    - Include document count for verification
-    - Include model and dimensions for transparency
+    - Include document count for verification (vectors_stored per Issue #19)
+    - Include model and dimensions for transparency (Issue #19)
     - Include processing time for observability
     """
     vector_ids: List[str] = Field(
         ...,
         description="List of vector IDs for stored documents"
     )
-    stored_count: int = Field(
+    vectors_stored: int = Field(
         ...,
-        description="Number of documents successfully stored",
+        description="Number of vectors successfully stored (Issue #19 - required field)",
         ge=0
     )
     model: str = Field(
         ...,
-        description="Model used for embedding generation"
+        description="Model used for embedding generation (Issue #19 - required field)"
     )
     dimensions: int = Field(
         ...,
-        description="Dimensionality of the embedding vectors"
+        description="Dimensionality of the embedding vectors (Issue #19 - required field)"
     )
     namespace: str = Field(
         ...,
@@ -188,7 +189,7 @@ class EmbedAndStoreResponse(BaseModel):
     )
     processing_time_ms: int = Field(
         ...,
-        description="Total processing time in milliseconds (integer)",
+        description="Total processing time in milliseconds (Issue #19 - included when available)",
         ge=0
     )
 
@@ -196,7 +197,7 @@ class EmbedAndStoreResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "vector_ids": ["vec_abc123", "vec_xyz789"],
-                "stored_count": 2,
+                "vectors_stored": 2,
                 "model": "BAAI/bge-small-en-v1.5",
                 "dimensions": 384,
                 "namespace": "agent_memory",

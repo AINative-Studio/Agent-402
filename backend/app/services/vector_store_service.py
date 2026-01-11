@@ -147,11 +147,17 @@ class VectorStoreService:
 
         # Check for existing vector
         namespace_vectors = self._vectors[project_id][validated_namespace]
-        if vector_id in namespace_vectors and not upsert:
+        existing_vector = namespace_vectors.get(vector_id)
+
+        if existing_vector and not upsert:
             raise ValueError(
                 f"Vector with ID '{vector_id}' already exists in namespace '{validated_namespace}'. "
                 f"Use upsert=True to update."
             )
+
+        # Determine if this is a create or update operation
+        is_update = existing_vector is not None
+        created_at = existing_vector["created_at"] if is_update else datetime.utcnow().isoformat()
 
         # Store vector with all metadata
         vector_data = {
@@ -164,7 +170,7 @@ class VectorStoreService:
             "model": model,
             "dimensions": dimensions,
             "metadata": metadata or {},
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": created_at,
             "updated_at": datetime.utcnow().isoformat()
         }
 
@@ -187,10 +193,12 @@ class VectorStoreService:
             "vector_id": vector_id,
             "namespace": validated_namespace,
             "stored": True,
+            "created": not is_update,  # True if new vector created, False if updated
             "upsert": upsert,
             "dimensions": dimensions,
             "model": model,
-            "created_at": vector_data["created_at"]
+            "created_at": vector_data["created_at"],
+            "updated_at": vector_data["updated_at"]
         }
 
     def search_vectors(
@@ -389,6 +397,42 @@ class VectorStoreService:
             return []
 
         return list(self._vectors[project_id].keys())
+
+    def get_vector(
+        self,
+        project_id: str,
+        vector_id: str,
+        namespace: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific vector by ID from a namespace.
+
+        Args:
+            project_id: Project identifier
+            vector_id: Vector identifier
+            namespace: Optional namespace (defaults to "default")
+
+        Returns:
+            Vector data or None if not found
+        """
+        validated_namespace = self._validate_namespace(namespace)
+
+        if project_id not in self._vectors:
+            return None
+
+        if validated_namespace not in self._vectors[project_id]:
+            return None
+
+        return self._vectors[project_id][validated_namespace].get(vector_id)
+
+    def clear_all_vectors(self):
+        """
+        Clear all vectors from storage.
+
+        This method is primarily for testing purposes.
+        """
+        self._vectors.clear()
+        logger.warning("All vectors cleared from storage")
 
 
 # Singleton instance

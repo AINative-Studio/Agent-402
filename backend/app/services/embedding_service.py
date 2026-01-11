@@ -260,7 +260,9 @@ class EmbeddingService:
 
         # Issue #19: Return vectors_stored count (always 1 for single operation)
         vectors_stored = 1
-        created = storage_result.get("upsert", False) == False or storage_result.get("stored", False)
+
+        # Issue #18: Get created status from storage_result
+        created = storage_result.get("created", True)
 
         return (
             vectors_stored,
@@ -269,7 +271,7 @@ class EmbeddingService:
             dimensions,
             created,
             processing_time,
-            storage_result["created_at"]
+            storage_result["updated_at"]  # Use updated_at for stored_at timestamp
         )
 
     def get_vector(self, vector_id: str) -> Optional[Dict[str, Any]]:

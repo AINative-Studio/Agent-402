@@ -76,4 +76,36 @@ python3 -m pytest tests/test_projects_api.py -v
 ======================== 25 passed, 30 warnings in 0.16s ========================
 ```
 
+---
+
+## ⚠️ Important: Vector Operations Require /database/ Prefix
+
+**If you're using vector operations** (not embeddings), remember:
+
+```bash
+# ✅ CORRECT - Vector operations need /database/ prefix
+curl -X POST "http://localhost:8000/v1/public/database/vectors/upsert" \
+  -H "X-API-Key: test_api_key_123" \
+  -d '{"vectors": [...]}'
+
+# ❌ INCORRECT - Missing /database/ (will return 404)
+curl -X POST "http://localhost:8000/v1/public/vectors/upsert" \
+  -H "X-API-Key: test_api_key_123" \
+  -d '{"vectors": [...]}'
+```
+
+**Embeddings endpoints do NOT need /database/:**
+- `/v1/public/{project_id}/embeddings/generate` ✅
+- `/v1/public/{project_id}/embeddings/embed-and-store` ✅
+- `/v1/public/{project_id}/embeddings/search` ✅
+
+**Vector operations DO need /database/:**
+- `/v1/public/database/vectors/upsert` ✅
+- `/v1/public/database/vectors/search` ✅
+- `/v1/public/database/tables/*` ✅
+
+**See:** [DATABASE_PREFIX_WARNING.md](/docs/api/DATABASE_PREFIX_WARNING.md) for complete details.
+
+---
+
 For full documentation, see API_IMPLEMENTATION.md

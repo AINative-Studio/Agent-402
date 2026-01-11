@@ -26,6 +26,7 @@ from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 # Use embeddings API with Issue #16 implementation for batch embed-and-store
 from app.api.embeddings_issue16 import router as embeddings_router
+from app.api.vectors import router as vectors_router
 from app.middleware import APIKeyAuthMiddleware
 
 
@@ -101,6 +102,7 @@ async def health_check():
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(embeddings_router)
+app.include_router(vectors_router)
 
 
 # Root endpoint

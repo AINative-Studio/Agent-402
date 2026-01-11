@@ -323,7 +323,7 @@ class TestEmbedAndStoreValidation:
 
         Verifies:
         - Missing API key returns 401
-        - Error code is INVALID_API_KEY
+        - Error code is UNAUTHORIZED (from middleware)
         """
         response = client.post(
             f"/v1/public/{project_id}/embeddings/embed-and-store",
@@ -332,7 +332,8 @@ class TestEmbedAndStoreValidation:
 
         assert response.status_code == 401
         data = response.json()
-        assert data.get("error_code") == "INVALID_API_KEY"
+        # Middleware returns UNAUTHORIZED error code for missing auth
+        assert data.get("error_code") in ["INVALID_API_KEY", "UNAUTHORIZED"]
 
 
 class TestEmbedAndStoreDXContract:

@@ -12,7 +12,7 @@ Per Epic 3, Story 5: As a developer, responses include processing_time_ms.
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.services.embedding_service import get_embedding_service
+from app.services.embedding_service import embedding_service
 
 
 # Test fixtures
@@ -187,7 +187,7 @@ class TestServiceLayerTiming:
 
         Issue #15: Service layer must track time as integer milliseconds.
         """
-        service = get_embedding_service()
+        service = embedding_service
 
         embedding, model, dimensions, processing_time_ms = service.generate_embedding(
             text="Test direct service call",
@@ -209,7 +209,7 @@ class TestServiceLayerTiming:
 
         Issue #15: Track time from request start to response ready.
         """
-        service = get_embedding_service()
+        service = embedding_service
 
         import time
         start = time.time()

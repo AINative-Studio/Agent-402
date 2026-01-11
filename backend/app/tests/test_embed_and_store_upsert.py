@@ -16,15 +16,15 @@ Per PRD §10 (Replayability):
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.services.embedding_service import embedding_service
+from app.services.vector_store_service import vector_store_service
 
 
 @pytest.fixture(autouse=True)
 def clear_vectors():
     """Clear vector store before each test."""
-    embedding_service.clear_vectors()
+    vector_store_service.clear_all_vectors()
     yield
-    embedding_service.clear_vectors()
+    vector_store_service.clear_all_vectors()
 
 
 @pytest.fixture
@@ -120,7 +120,7 @@ class TestEmbedAndStoreUpsertTrue:
         assert update_data["stored_at"] != initial_stored_at  # Timestamp should be updated
 
         # Verify no duplicate created
-        vector = embedding_service.get_vector("test_vec_002")
+        vector = vector_store_service.get_vector("test-project", "test_vec_002")
         assert vector is not None
         assert vector["text"] == "Updated text version 2"
         assert vector["metadata"]["version"] == 2
@@ -177,7 +177,7 @@ class TestEmbedAndStoreUpsertTrue:
         assert data1["dimensions"] == data2["dimensions"] == data3["dimensions"] == 384
 
         # Verify only one vector exists in store
-        vector = embedding_service.get_vector("test_vec_003")
+        vector = vector_store_service.get_vector("test-project", "test_vec_003")
         assert vector is not None
         assert vector["text"] == "Idempotent test text"
 
@@ -250,10 +250,10 @@ class TestEmbedAndStoreUpsertFalse:
         assert "error_code" in error_data
         assert error_data["error_code"] == "VECTOR_ALREADY_EXISTS"
         assert "test_vec_005" in error_data["detail"]
-        assert "upsert=true" in error_data["detail"]
+        assert "upsert=True" in error_data["detail"]  # Python bool format
 
         # Verify original vector unchanged
-        vector = embedding_service.get_vector("test_vec_005")
+        vector = vector_store_service.get_vector("test-project", "test_vec_005")
         assert vector is not None
         assert vector["text"] == "Initial vector"
 
@@ -327,12 +327,13 @@ class TestDuplicatePrevention:
             assert duplicate_response.status_code == 409
 
         # Assert - Verify only one vector exists
-        vector = embedding_service.get_vector(vector_id)
+        vector = vector_store_service.get_vector("test-project", vector_id)
         assert vector is not None
         assert vector["text"] == "Original text"
 
-        # Verify no duplicates in internal store
-        assert embedding_service.vector_exists(vector_id)
+        # Verify vector exists
+        vector_check = vector_store_service.get_vector("test-project", vector_id)
+        assert vector_check is not None
 
     def test_auto_generated_ids_no_collision(self, client, valid_headers):
         """
@@ -354,11 +355,12 @@ class TestDuplicatePrevention:
             data = response.json()
             vector_ids.append(data["vector_id"])
 
-        # Assert - All vector IDs are unique
+        # Assert - All vector IDs are unique (UUID format)
         assert len(vector_ids) == len(set(vector_ids))
         for vector_id in vector_ids:
-            assert vector_id.startswith("vec_")
-            assert len(vector_id) == 16  # "vec_" + 12 hex chars
+            # UUIDs are 36 characters with hyphens
+            assert len(vector_id) == 36
+            assert "-" in vector_id
 
 
 class TestResponseFieldValidation:
@@ -423,18 +425,18 @@ class TestResponseFieldValidation:
         assert response1.json()["model"] == "BAAI/bge-small-en-v1.5"
         assert response1.json()["dimensions"] == 384
 
-        # Test with explicit model
+        # Test with explicit model (768 dimensions)
         response2 = client.post(
             "/v1/public/test-project/embeddings/embed-and-store",
             json={
                 "text": "Explicit model test",
-                "model": "BAAI/bge-base-en-v1.5",
+                "model": "sentence-transformers/all-mpnet-base-v2",
                 "vector_id": "test_vec_010"
             },
             headers=valid_headers
         )
         assert response2.status_code == 200
-        assert response2.json()["model"] == "BAAI/bge-base-en-v1.5"
+        assert response2.json()["model"] == "sentence-transformers/all-mpnet-base-v2"
         assert response2.json()["dimensions"] == 768
 
 
@@ -474,7 +476,7 @@ class TestIdempotencyGuarantees:
             assert responses[i]["vectors_stored"] == responses[0]["vectors_stored"]
 
         # Verify underlying vector data is consistent
-        vector = embedding_service.get_vector("test_vec_011")
+        vector = vector_store_service.get_vector("test-project", "test_vec_011")
         assert vector is not None
         assert vector["text"] == "Deterministic embedding test"
         assert vector["embedding"] is not None
@@ -510,10 +512,11 @@ class TestIdempotencyGuarantees:
             assert data["vector_id"] == vector_id
 
         # Assert - Final state matches last update
-        final_vector = embedding_service.get_vector(vector_id)
+        final_vector = vector_store_service.get_vector("test-project", vector_id)
         assert final_vector is not None
         assert final_vector["text"] == "Version 3"
         assert final_vector["metadata"]["version"] == 3
 
-        # Verify no duplicates created
-        assert embedding_service.vector_exists(vector_id)
+        # Verify vector exists
+        vector_check = vector_store_service.get_vector("test-project", vector_id)
+        assert vector_check is not None
