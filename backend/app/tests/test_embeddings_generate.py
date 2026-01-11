@@ -22,7 +22,7 @@ def valid_api_key():
     """Get a valid API key from settings."""
     if settings.valid_api_keys:
         return list(settings.valid_api_keys.keys())[0]
-    return "test_api_key_abc123"
+    return settings.demo_api_key_1
 
 
 @pytest.fixture

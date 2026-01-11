@@ -1,25 +1,27 @@
 """
 Dimension validation utilities for vector operations.
-Implements strict dimension enforcement per Issue #28.
+Implements strict dimension enforcement per Issue #28 and Issue #79.
 
 This module provides utilities for validating vector dimensions across
 the application, ensuring consistency and deterministic behavior.
 
-Per DX Contract (PRD §10):
+Per DX Contract (PRD §10) and Issue #79:
+- Default model: BAAI/bge-small-en-v1.5 (384 dimensions)
 - Dimension validation is strict and deterministic
 - Only supported dimensions are allowed
 - Clear error messages for validation failures
 - Project-level dimension configuration support
 """
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 from app.core.errors import APIError
+from app.core.config import SUPPORTED_MODELS, DEFAULT_EMBEDDING_DIMENSIONS
 
 
-# Supported vector dimensions per Issue #28
+# Supported vector dimensions per Issue #28 and #79
 SUPPORTED_DIMENSIONS = {384, 768, 1024, 1536}
 
 # Default dimension (matches default embedding model BAAI/bge-small-en-v1.5)
-DEFAULT_DIMENSION = 384
+DEFAULT_DIMENSION = DEFAULT_EMBEDDING_DIMENSIONS
 
 # Mapping of dimensions to common embedding models
 DIMENSION_TO_MODELS = {
@@ -266,3 +268,75 @@ def validate_batch_dimensions(
             )
 
     return True, None
+
+
+def validate_dimensions(model: str, embeddings: Union[List[float], List[List[float]]]) -> bool:
+    """
+    Validate that embedding dimensions match expected model dimensions.
+
+    Issue #79: Centralized validation function for model dimension matching.
+    Supports both single embeddings and batch embeddings.
+
+    Args:
+        model: Model identifier (e.g., "BAAI/bge-small-en-v1.5")
+        embeddings: Single embedding vector or list of embedding vectors
+
+    Returns:
+        True if dimensions are valid
+
+    Raises:
+        ValueError: If dimensions don't match expected or model is unsupported
+    """
+    if model not in SUPPORTED_MODELS:
+        supported = ", ".join(SUPPORTED_MODELS.keys())
+        raise ValueError(
+            f"Model '{model}' is not supported. "
+            f"Supported models: {supported}"
+        )
+
+    expected_dims = SUPPORTED_MODELS[model]
+
+    # Handle single embedding vector
+    if embeddings and isinstance(embeddings[0], (int, float)):
+        actual_dims = len(embeddings)
+        if actual_dims != expected_dims:
+            raise ValueError(
+                f"Dimension mismatch for model '{model}': "
+                f"expected {expected_dims} dimensions, got {actual_dims}"
+            )
+        return True
+
+    # Handle batch of embeddings
+    if embeddings and isinstance(embeddings[0], list):
+        for idx, embedding in enumerate(embeddings):
+            actual_dims = len(embedding)
+            if actual_dims != expected_dims:
+                raise ValueError(
+                    f"Dimension mismatch for model '{model}' at index {idx}: "
+                    f"expected {expected_dims} dimensions, got {actual_dims}"
+                )
+        return True
+
+    # Empty embeddings list
+    if not embeddings:
+        return True
+
+    # Unknown format
+    raise ValueError(
+        "Invalid embeddings format. Expected List[float] or List[List[float]]"
+    )
+
+
+def get_model_dimensions(model: str) -> int:
+    """
+    Get expected dimensions for a given model.
+
+    Issue #79: Return dimensions for model, default to DEFAULT_EMBEDDING_DIMENSIONS.
+
+    Args:
+        model: Model identifier (e.g., "BAAI/bge-small-en-v1.5")
+
+    Returns:
+        Expected dimension count for the model, or DEFAULT_EMBEDDING_DIMENSIONS if not found
+    """
+    return SUPPORTED_MODELS.get(model, DEFAULT_EMBEDDING_DIMENSIONS)

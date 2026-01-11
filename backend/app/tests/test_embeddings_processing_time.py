@@ -11,6 +11,7 @@ Per Epic 3, Story 5: As a developer, responses include processing_time_ms.
 """
 import pytest
 from fastapi.testclient import TestClient
+from app.core.config import settings
 from app.main import app
 from app.services.embedding_service import embedding_service
 
@@ -25,7 +26,7 @@ def client():
 @pytest.fixture
 def valid_api_key():
     """Return a valid API key for testing."""
-    return "test_api_key_12345"
+    return settings.demo_api_key_1
 
 
 @pytest.fixture

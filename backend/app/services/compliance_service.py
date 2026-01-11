@@ -39,29 +39,20 @@ class ComplianceService:
     and pagination support. Uses ZeroDB for persistence.
     """
 
-    def __init__(self):
-        """Initialize the compliance service."""
-        # ZeroDB client will be retrieved lazily
-        self._client = None
+    def __init__(self, client=None):
+        """
+        Initialize the compliance service.
+
+        Args:
+            client: Optional ZeroDB client instance (for testing)
+        """
+        self._client = client
 
     @property
     def client(self):
         """Lazy initialization of ZeroDB client."""
         if self._client is None:
             self._client = get_zerodb_client()
-        return self._client
-
-    def _get_client(self):
-        """Get the ZeroDB client singleton."""
-        if self._client is None:
-            self._client = None
-
-    @property
-    def client(self):
-        """Lazy initialization of ZeroDB client."""
-        if self._client is None:
-            self._client = get_zerodb_client()
-        return self._client
         return self._client
 
     def generate_event_id(self) -> str:
@@ -121,8 +112,7 @@ class ComplianceService:
         }
 
         try:
-            client = self._get_client()
-            result = await client.insert_row(COMPLIANCE_EVENTS_TABLE, row_data)
+            result = await self.client.insert_row(COMPLIANCE_EVENTS_TABLE, row_data)
             logger.info(f"Created compliance event {event_id} for project {project_id}")
         except Exception as e:
             logger.error(f"Failed to create compliance event: {e}")
@@ -171,13 +161,12 @@ class ComplianceService:
             ComplianceEventResponse or None if not found
         """
         try:
-            client = self._get_client()
             # Query by event_id and project_id
             filter_query = {
                 "event_id": {"$eq": event_id},
                 "project_id": {"$eq": project_id}
             }
-            result = await client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
+            result = await self.client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
 
             rows = result.get("rows", [])
             if not rows:
@@ -246,13 +235,11 @@ class ComplianceService:
             Tuple of (list of events, total count)
         """
         try:
-            client = self._get_client()
-
             # Build MongoDB-style filter
             filter_query = self._build_filter_query(project_id, filters)
 
             # Query with pagination
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 COMPLIANCE_EVENTS_TABLE,
                 filter_query,
                 limit=filters.limit,
@@ -350,14 +337,12 @@ class ComplianceService:
             True if deleted, False if not found
         """
         try:
-            client = self._get_client()
-
             # First, find the row to get its row_id
             filter_query = {
                 "event_id": {"$eq": event_id},
                 "project_id": {"$eq": project_id}
             }
-            result = await client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
+            result = await self.client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
 
             rows = result.get("rows", [])
             if not rows:
@@ -370,7 +355,7 @@ class ComplianceService:
                 return False
 
             # Delete the row
-            await client.delete_row(COMPLIANCE_EVENTS_TABLE, str(row_id))
+            await self.client.delete_row(COMPLIANCE_EVENTS_TABLE, str(row_id))
             logger.info(f"Deleted compliance event {event_id} for project {project_id}")
             return True
         except Exception as e:
@@ -391,11 +376,9 @@ class ComplianceService:
             Dictionary with event statistics
         """
         try:
-            client = self._get_client()
-
             # Get all events for the project (with a reasonable limit)
             filter_query = {"project_id": {"$eq": project_id}}
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 COMPLIANCE_EVENTS_TABLE,
                 filter_query,
                 limit=10000  # Reasonable limit for stats

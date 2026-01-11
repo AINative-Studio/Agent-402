@@ -114,7 +114,7 @@ async def generate_embedding(
         EmbeddingGenerateResponse with embedding vector and metadata
     """
     # Generate embedding (service handles default model logic)
-    embedding, model_used, dimensions, processing_time = embedding_service.generate_embedding(
+    embedding, model_used, dimensions, processing_time = await embedding_service.generate_embedding(
         text=request.text,
         model=request.model
     )
@@ -392,7 +392,7 @@ async def search_vectors(
     start_time = time.time()
 
     # Generate query embedding
-    query_embedding, model_used, dimensions, _ = embedding_service.generate_embedding(
+    query_embedding, model_used, dimensions, _ = await embedding_service.generate_embedding(
         text=request.query,
         model=request.model
     )

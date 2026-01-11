@@ -43,29 +43,20 @@ class AgentMemoryService:
     - Semantic search via embeddings endpoints
     """
 
-    def __init__(self):
-        """Initialize the agent memory service."""
-        self._client = None
+    def __init__(self, client=None):
+        """
+        Initialize the agent memory service.
+
+        Args:
+            client: Optional ZeroDB client instance (for testing)
+        """
+        self._client = client
 
     @property
     def client(self):
         """Lazy initialization of ZeroDB client."""
         if self._client is None:
             self._client = get_zerodb_client()
-        return self._client
-        logger.info("AgentMemoryService initialized")
-
-    def _get_client(self):
-        """Get ZeroDB client lazily to avoid initialization issues."""
-        if self._client is None:
-            self._client = None
-
-    @property
-    def client(self):
-        """Lazy initialization of ZeroDB client."""
-        if self._client is None:
-            self._client = get_zerodb_client()
-        return self._client
         return self._client
 
     def generate_memory_id(self) -> str:
@@ -109,7 +100,6 @@ class AgentMemoryService:
         Raises:
             APIError: If storage fails
         """
-        client = self._get_client()
         memory_id = self.generate_memory_id()
         timestamp = datetime.utcnow().isoformat() + "Z"
 
@@ -128,12 +118,12 @@ class AgentMemoryService:
 
         try:
             # Insert row into agent_memory table
-            result = await client.insert_row(TABLE_NAME, row_data)
+            result = await self.client.insert_row(TABLE_NAME, row_data)
 
             # Also store embedding for semantic search
             embedding_id = None
             try:
-                embed_result = await client.embed_and_store(
+                embed_result = await self.client.embed_and_store(
                     texts=[content],
                     namespace=f"{EMBEDDING_NAMESPACE}_{namespace}",
                     metadata=[{
@@ -214,8 +204,6 @@ class AgentMemoryService:
         Returns:
             Memory record dictionary or None if not found
         """
-        client = self._get_client()
-
         try:
             # Query by memory_id and project_id
             filter_query = {
@@ -223,7 +211,7 @@ class AgentMemoryService:
                 "project_id": {"$eq": project_id}
             }
 
-            result = await client.query_rows(TABLE_NAME, filter_query, limit=1)
+            result = await self.client.query_rows(TABLE_NAME, filter_query, limit=1)
 
             rows = result.get("rows", [])
             if not rows:
@@ -271,7 +259,6 @@ class AgentMemoryService:
         Returns:
             Tuple of (memories list, total count, filters applied)
         """
-        client = self._get_client()
         filters_applied = {}
 
         # Build MongoDB-style filter
@@ -293,7 +280,7 @@ class AgentMemoryService:
 
         try:
             # Query rows with filter
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 TABLE_NAME,
                 filter_query,
                 limit=limit,
@@ -356,8 +343,6 @@ class AgentMemoryService:
         Returns:
             True if deleted, False if not found
         """
-        client = self._get_client()
-
         try:
             # First get the memory to find the row_id
             filter_query = {
@@ -365,7 +350,7 @@ class AgentMemoryService:
                 "project_id": {"$eq": project_id}
             }
 
-            result = await client.query_rows(TABLE_NAME, filter_query, limit=1)
+            result = await self.client.query_rows(TABLE_NAME, filter_query, limit=1)
             rows = result.get("rows", [])
 
             if not rows:
@@ -379,7 +364,7 @@ class AgentMemoryService:
                 return False
 
             # Delete the row
-            await client.delete_row(TABLE_NAME, str(row_id))
+            await self.client.delete_row(TABLE_NAME, str(row_id))
             logger.info(f"Deleted memory {memory_id} from project {project_id}")
             return True
 
@@ -411,15 +396,13 @@ class AgentMemoryService:
         Returns:
             Dictionary with namespace statistics
         """
-        client = self._get_client()
-
         try:
             # Query all memories for the project
             filter_query = {
                 "project_id": {"$eq": project_id}
             }
 
-            result = await client.query_rows(TABLE_NAME, filter_query, limit=1000)
+            result = await self.client.query_rows(TABLE_NAME, filter_query, limit=1000)
             rows = result.get("rows", [])
 
             if not rows:
@@ -472,11 +455,9 @@ class AgentMemoryService:
         Returns:
             List of matching memory records with similarity scores
         """
-        client = self._get_client()
-
         try:
             # Use semantic search endpoint
-            result = await client.semantic_search(
+            result = await self.client.semantic_search(
                 query=query,
                 top_k=top_k,
                 namespace=f"{EMBEDDING_NAMESPACE}_{namespace}",

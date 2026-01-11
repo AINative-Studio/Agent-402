@@ -39,23 +39,24 @@ def clear_vector_store():
     vector_store_service.clear_all_vectors()
 
 
-def store_vector_directly(project_id, text, model="BAAI/bge-small-en-v1.5", namespace="default", metadata=None):
+async def store_vector_directly(project_id, text, model="BAAI/bge-small-en-v1.5", namespace="default", metadata=None):
     """
     Helper function to store a vector directly in vector_store_service.
 
     This bypasses the embed-and-store API endpoint and stores directly,
     ensuring vectors are available for search tests.
     """
+    import asyncio
     from app.services.embedding_service import embedding_service
 
-    # Generate embedding
-    embedding, model_used, dimensions, _ = embedding_service.generate_embedding(
+    # Generate embedding (async)
+    embedding, model_used, dimensions, _ = await embedding_service.generate_embedding(
         text=text,
         model=model
     )
 
-    # Store directly in vector_store_service
-    result = embedding_service.embed_and_store(
+    # Store directly in vector_store_service (async)
+    result = await embedding_service.embed_and_store(
         text=text,
         model=model,
         namespace=namespace,
@@ -70,7 +71,7 @@ def store_vector_directly(project_id, text, model="BAAI/bge-small-en-v1.5", name
 class TestIncludeMetadataParameter:
     """Tests for include_metadata parameter (Issue #26)."""
 
-    def test_search_with_metadata_included_by_default(self):
+    async def test_search_with_metadata_included_by_default(self):
         """
         Test that metadata is included by default (include_metadata defaults to true).
 
@@ -84,7 +85,7 @@ class TestIncludeMetadataParameter:
             "priority": "high"
         }
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_metadata_default",
@@ -116,7 +117,7 @@ class TestIncludeMetadataParameter:
         assert result["metadata"]["task"] == "test_task"
         assert result["metadata"]["priority"] == "high"
 
-    def test_search_with_metadata_explicitly_true(self):
+    async def test_search_with_metadata_explicitly_true(self):
         """
         Test that metadata is included when include_metadata=true.
 
@@ -129,7 +130,7 @@ class TestIncludeMetadataParameter:
             "category": "example"
         }
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_metadata_true",
@@ -162,7 +163,7 @@ class TestIncludeMetadataParameter:
         assert result["metadata"]["source"] == "test"
         assert result["metadata"]["category"] == "example"
 
-    def test_search_with_metadata_false_excludes_metadata(self):
+    async def test_search_with_metadata_false_excludes_metadata(self):
         """
         Test that metadata is excluded when include_metadata=false.
 
@@ -175,7 +176,7 @@ class TestIncludeMetadataParameter:
             "another_field": "value"
         }
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_metadata_false",
@@ -211,7 +212,7 @@ class TestIncludeMetadataParameter:
 class TestIncludeEmbeddingsParameter:
     """Tests for include_embeddings parameter (Issue #26)."""
 
-    def test_search_excludes_embeddings_by_default(self):
+    async def test_search_excludes_embeddings_by_default(self):
         """
         Test that embeddings are excluded by default (include_embeddings defaults to false).
 
@@ -220,7 +221,7 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for embedding exclusion default"
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_embedding_default"
@@ -251,7 +252,7 @@ class TestIncludeEmbeddingsParameter:
         # Embedding should be None when excluded
         assert result.get("embedding") is None
 
-    def test_search_with_embeddings_explicitly_false(self):
+    async def test_search_with_embeddings_explicitly_false(self):
         """
         Test that embeddings are excluded when include_embeddings=false.
 
@@ -260,7 +261,7 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for explicit embedding exclusion"
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_embedding_false"
@@ -289,7 +290,7 @@ class TestIncludeEmbeddingsParameter:
         result = data["results"][0]
         assert result.get("embedding") is None
 
-    def test_search_with_embeddings_true_includes_embeddings(self):
+    async def test_search_with_embeddings_true_includes_embeddings(self):
         """
         Test that embeddings are included when include_embeddings=true.
 
@@ -299,7 +300,7 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for embedding inclusion"
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_embedding_true"
@@ -340,7 +341,7 @@ class TestIncludeEmbeddingsParameter:
 class TestParameterCombinations:
     """Tests for all combinations of include_metadata and include_embeddings (Issue #26)."""
 
-    def test_both_parameters_true(self):
+    async def test_both_parameters_true(self):
         """
         Test include_metadata=true and include_embeddings=true.
 
@@ -351,7 +352,7 @@ class TestParameterCombinations:
         vector_text = "Test document for both parameters true"
         metadata = {"test": "data"}
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_both_true",
@@ -390,7 +391,7 @@ class TestParameterCombinations:
         assert isinstance(result["embedding"], list)
         assert len(result["embedding"]) == 384
 
-    def test_both_parameters_false(self):
+    async def test_both_parameters_false(self):
         """
         Test include_metadata=false and include_embeddings=false.
 
@@ -401,7 +402,7 @@ class TestParameterCombinations:
         vector_text = "Test document for both parameters false"
         metadata = {"test": "data"}
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_both_false",
@@ -442,7 +443,7 @@ class TestParameterCombinations:
         assert "document" in result
         assert "score" in result
 
-    def test_metadata_true_embeddings_false(self):
+    async def test_metadata_true_embeddings_false(self):
         """
         Test include_metadata=true and include_embeddings=false.
 
@@ -453,7 +454,7 @@ class TestParameterCombinations:
         vector_text = "Test document for metadata true embeddings false"
         metadata = {"agent": "test"}
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_meta_true_embed_false",
@@ -490,7 +491,7 @@ class TestParameterCombinations:
         # Embedding should be None
         assert result.get("embedding") is None
 
-    def test_metadata_false_embeddings_true(self):
+    async def test_metadata_false_embeddings_true(self):
         """
         Test include_metadata=false and include_embeddings=true.
 
@@ -501,7 +502,7 @@ class TestParameterCombinations:
         vector_text = "Test document for metadata false embeddings true"
         metadata = {"agent": "test"}
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_meta_false_embed_true",
@@ -543,7 +544,7 @@ class TestParameterCombinations:
 class TestResponseSizeOptimization:
     """Tests to verify response size optimization (Issue #26)."""
 
-    def test_response_size_comparison(self):
+    async def test_response_size_comparison(self):
         """
         Test that excluding embeddings significantly reduces response size.
 
@@ -553,7 +554,7 @@ class TestResponseSizeOptimization:
         # Store a vector
         vector_text = "Test document for response size comparison"
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_response_size"
@@ -606,7 +607,7 @@ class TestResponseSizeOptimization:
 class TestOtherFunctionalityNotBroken:
     """Tests to ensure toggling doesn't break other functionality (Issue #26)."""
 
-    def test_metadata_filtering_still_works(self):
+    async def test_metadata_filtering_still_works(self):
         """
         Ensure metadata_filter parameter still works with include_metadata toggle.
 
@@ -621,7 +622,7 @@ class TestOtherFunctionalityNotBroken:
         ]
 
         for vec in vectors:
-            store_vector_directly(
+            await store_vector_directly(
                 PROJECT_ID,
                 vec["text"],
                 namespace="test_metadata_filter",
@@ -649,14 +650,14 @@ class TestOtherFunctionalityNotBroken:
         # Even though metadata is not included in response
         assert len(data["results"]) == 2
 
-    def test_similarity_threshold_still_works(self):
+    async def test_similarity_threshold_still_works(self):
         """
         Ensure similarity_threshold parameter still works with toggles.
         """
         # Store a vector
         vector_text = "Specific test document for similarity"
 
-        store_vector_directly(
+        await store_vector_directly(
             PROJECT_ID,
             vector_text,
             namespace="test_similarity_threshold"

@@ -13,6 +13,14 @@ sentence-transformers>=3.0.0
 torch>=2.5.0
 transformers>=4.45.0
 
+# Cryptography for X402 DID signing
+ecdsa>=0.18.0
+
+# CrewAI and LangChain dependencies
+crewai>=0.28.0
+langchain>=0.1.0
+langchain-community>=0.1.0
+
 # Testing (dev only)
 pytest>=8.0.0
 pytest-asyncio>=0.24.0

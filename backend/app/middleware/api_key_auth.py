@@ -56,6 +56,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         "/docs",
         "/redoc",
         "/openapi.json",
+        "/.well-known/x402",  # X402 protocol discovery endpoint (Issue #73)
+        "/x402",  # X402 protocol signed POST endpoint (Issue #77)
         "/v1/public/auth/login",  # Login endpoint doesn't require auth
         "/v1/public/auth/refresh",  # Refresh endpoint uses refresh token in body
         "/v1/public/embeddings/models",  # Public model listing for documentation

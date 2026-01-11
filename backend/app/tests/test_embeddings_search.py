@@ -41,14 +41,14 @@ class TestEmbeddingSearch:
 
     def _embed_and_store(self, client, auth_headers, project_id, texts, namespace=None, metadata=None):
         """
-        Helper to embed and store vectors using the NEW texts (array) format.
+        Helper to embed and store vectors using the documents (array) format.
 
-        IMPORTANT: The embed-and-store endpoint uses `texts` field (array), NOT `text` field.
+        IMPORTANT: The embed-and-store endpoint uses `documents` field (array) per Issue #16.
         """
         request_data = {
-            "texts": texts if isinstance(texts, list) else [texts],
+            "documents": texts if isinstance(texts, list) else [texts],
             "namespace": namespace,
-            "metadata": metadata or {}
+            "metadata": metadata if isinstance(metadata, list) else [metadata] if metadata else []
         }
         response = client.post(
             f"/v1/public/{project_id}/embeddings/embed-and-store",

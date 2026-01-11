@@ -20,6 +20,7 @@ Per DX Contract §3:
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.config import settings
 from app.core.embedding_models import (
     DEFAULT_EMBEDDING_MODEL,
     EMBEDDING_MODEL_SPECS,
@@ -29,8 +30,8 @@ from app.core.embedding_models import (
 
 client = TestClient(app)
 
-# Test API key for authentication
-TEST_API_KEY = "test_api_key_12345"
+# Test API key for authentication - use valid demo key
+TEST_API_KEY = settings.demo_api_key_1
 
 
 class TestModelConfiguration:

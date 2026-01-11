@@ -13,6 +13,7 @@ Per PRD §10: Success criteria - behavior matches documented defaults
 """
 import pytest
 from fastapi.testclient import TestClient
+from app.core.config import settings
 from app.main import app
 
 
@@ -25,7 +26,7 @@ def client():
 @pytest.fixture
 def valid_api_key():
     """Return a valid API key for testing."""
-    return "test_api_key_integration"
+    return settings.demo_api_key_1
 
 
 @pytest.fixture

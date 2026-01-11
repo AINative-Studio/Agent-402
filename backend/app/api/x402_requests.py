@@ -1,6 +1,7 @@
 """
 X402 Requests API endpoints.
 Implements Epic 12 Issue 4: X402 requests linked to agent + task.
+Implements Issue #75: DID-based ECDSA Signing and Verification.
 
 Per PRD Section 6 (ZeroDB Integration):
 - X402 signed requests are logged with agent and task linkage
@@ -12,14 +13,20 @@ Per PRD Section 8 (X402 Protocol):
 - Requests must be traceable to originating agent and task
 - Supports compliance and audit requirements
 
+Per PRD Section 9 (Security & Authentication):
+- All X402 requests must have valid ECDSA signatures
+- Signatures are verified against agent DID
+- Invalid signatures are rejected with 401 Unauthorized
+
 Endpoints:
-- POST /v1/public/{project_id}/x402-requests - Create X402 request
+- POST /v1/public/{project_id}/x402-requests - Create X402 request (with signature verification)
 - GET /v1/public/{project_id}/x402-requests - List X402 requests (with filters)
 - GET /v1/public/{project_id}/x402-requests/{request_id} - Get single request with links
 """
 from typing import Optional
-from fastapi import APIRouter, Depends, status, Path, Query
+from fastapi import APIRouter, Depends, status, Path, Query, HTTPException
 from app.core.auth import get_current_user
+from app.core.did_signer import DIDSigner, InvalidDIDError
 from app.schemas.x402_requests import (
     X402RequestCreate,
     X402RequestResponse,
@@ -94,7 +101,12 @@ async def create_x402_request(
     current_user: str = Depends(get_current_user)
 ) -> X402RequestResponse:
     """
-    Create a new X402 signed request.
+    Create a new X402 signed request with signature verification.
+
+    Security (Issue #75):
+    - Verifies ECDSA signature against agent DID
+    - Rejects invalid signatures with 401 Unauthorized
+    - Adds signature_verified metadata to request
 
     Args:
         project_id: Project identifier
@@ -103,9 +115,42 @@ async def create_x402_request(
 
     Returns:
         X402RequestResponse with created request details
+
+    Raises:
+        HTTPException 401: Invalid signature or DID format
     """
+    # Verify signature before processing request
+    try:
+        is_valid = DIDSigner.verify_signature(
+            payload=request.request_payload,
+            signature_hex=request.signature,
+            did=request.agent_id
+        )
+
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature: signature verification failed"
+            )
+
+    except InvalidDIDError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid DID format: {str(e)}"
+        )
+    except Exception as e:
+        # Catch any other verification errors
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Signature verification error: {str(e)}"
+        )
+
     # Create the X402 request
-    created_request = x402_service.create_request(
+    # Add verification metadata
+    metadata = request.metadata or {}
+    metadata["signature_verified"] = True
+
+    created_request = await x402_service.create_request(
         project_id=project_id,
         agent_id=request.agent_id,
         task_id=request.task_id,
@@ -115,7 +160,7 @@ async def create_x402_request(
         status=request.status or X402RequestStatus.PENDING,
         linked_memory_ids=request.linked_memory_ids,
         linked_compliance_ids=request.linked_compliance_ids,
-        metadata=request.metadata
+        metadata=metadata
     )
 
     return X402RequestResponse(
@@ -228,7 +273,7 @@ async def list_x402_requests(
         X402RequestListResponse with paginated results
     """
     # Get filtered requests
-    requests, total = x402_service.list_requests(
+    requests, total = await x402_service.list_requests(
         project_id=project_id,
         agent_id=agent_id,
         task_id=task_id,
@@ -331,7 +376,7 @@ async def get_x402_request(
         X402RequestNotFoundError: If request not found
     """
     # Get request with linked records
-    request_data = x402_service.get_request(
+    request_data = await x402_service.get_request(
         project_id=project_id,
         request_id=request_id,
         include_links=True

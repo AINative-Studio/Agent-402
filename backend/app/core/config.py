@@ -54,6 +54,17 @@ class Settings(BaseSettings):
         description="JWT token expiration time in seconds (default: 1 hour)"
     )
 
+    # Embedding Configuration (Issue #79 - DX Contract Section 5)
+    # Default model must be BAAI/bge-small-en-v1.5 with 384 dimensions
+    default_embedding_model: str = Field(
+        default="BAAI/bge-small-en-v1.5",
+        description="Default embedding model (384 dimensions)"
+    )
+    default_embedding_dimensions: int = Field(
+        default=384,
+        description="Default embedding dimensions for BAAI/bge-small-en-v1.5"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -76,6 +87,25 @@ class Settings(BaseSettings):
         """Get user ID from API key, or None if invalid."""
         return self.valid_api_keys.get(api_key)
 
+
+# Embedding Model Constants (Issue #79)
+# Centralized configuration for supported models and dimensions
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
+DEFAULT_EMBEDDING_DIMENSIONS = 384
+
+# Supported models with their dimensions
+SUPPORTED_MODELS = {
+    "BAAI/bge-small-en-v1.5": 384,
+    "BAAI/bge-base-en-v1.5": 768,
+    "BAAI/bge-large-en-v1.5": 1024,
+    "sentence-transformers/all-MiniLM-L6-v2": 384,
+    "sentence-transformers/all-MiniLM-L12-v2": 384,
+    "sentence-transformers/all-mpnet-base-v2": 768,
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 384,
+    "sentence-transformers/all-distilroberta-v1": 768,
+    "sentence-transformers/msmarco-distilbert-base-v4": 768,
+    "text-embedding-ada-002": 1536,
+}
 
 # Global settings instance
 settings = Settings()

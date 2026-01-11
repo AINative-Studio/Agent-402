@@ -25,11 +25,24 @@ class EventService:
     Uses ZeroDB MCP tools for event storage.
     """
 
-    def __init__(self):
-        """Initialize event service with ZeroDB configuration."""
+    def __init__(self, client=None):
+        """
+        Initialize event service with ZeroDB configuration.
+
+        Args:
+            client: Optional ZeroDB client instance (for testing)
+        """
+        self._client = client
         self.api_key = os.getenv("ZERODB_API_KEY")
         self.project_id = os.getenv("ZERODB_PROJECT_ID")
         self.base_url = os.getenv("ZERODB_BASE_URL", "https://api.ainative.studio")
+
+    @property
+    def client(self):
+        """Lazy initialization of ZeroDB client."""
+        if self._client is None:
+            self._client = get_zerodb_client()
+        return self._client
 
     async def create_event(
         self,
@@ -103,7 +116,6 @@ class EventService:
 
         # Persist event to ZeroDB
         try:
-            client = get_zerodb_client()
             # Map to events table schema:
             # id (uuid), event_id (text), project_id (text), event_type (text),
             # source (text), correlation_id (text), data (jsonb),
@@ -119,7 +131,7 @@ class EventService:
                 "timestamp": timestamp,
                 "created_at": created_at
             }
-            await client.insert_row("events", row_data)
+            await self.client.insert_row("events", row_data)
             logger.info(f"Event persisted to ZeroDB: {event_id}")
         except Exception as e:
             # Log error but don't fail - still return the event

@@ -155,6 +155,52 @@ async def starlette_http_exception_handler(request: Request, exc: StarletteHTTPE
 app.add_exception_handler(Exception, internal_server_error_handler)
 
 
+# X402 Protocol Discovery Endpoint - Issue #73
+# Per PRD Section 9: Discovery endpoint for X402 protocol
+# Must be BEFORE middleware registration to ensure public access
+@app.get(
+    "/.well-known/x402",
+    tags=["x402"],
+    summary="X402 Protocol Discovery",
+    status_code=status.HTTP_200_OK,
+    response_model=None
+)
+async def x402_discovery():
+    """
+    X402 Protocol Discovery Endpoint.
+
+    Per PRD Section 9 (System Architecture):
+    - Public discovery endpoint (no authentication required)
+    - Returns X402 protocol metadata and capabilities
+    - Enables agent-native service discovery
+
+    This endpoint allows agents and clients to discover:
+    - Protocol version
+    - X402 endpoint location
+    - Supported DID methods
+    - Supported signature algorithms
+    - Server information
+
+    Returns:
+        JSON object with X402 protocol metadata:
+        - version: Protocol version (1.0)
+        - endpoint: X402 signed request endpoint (/x402)
+        - supported_dids: List of supported DID methods (["did:ethr"])
+        - signature_methods: List of supported signature algorithms (["ECDSA"])
+        - server_info: Server name and description
+    """
+    return {
+        "version": "1.0",
+        "endpoint": "/x402",
+        "supported_dids": ["did:ethr"],
+        "signature_methods": ["ECDSA"],
+        "server_info": {
+            "name": "ZeroDB Agent Finance API",
+            "description": "Autonomous Fintech Agent Crew - AINative Edition"
+        }
+    }
+
+
 # Health check endpoint
 @app.get(
     "/health",

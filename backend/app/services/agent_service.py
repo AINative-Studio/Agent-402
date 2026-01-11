@@ -104,14 +104,20 @@ class AgentService:
     Uses ZeroDB for persistent storage.
     """
 
-    def __init__(self):
-        self._client = None
+    def __init__(self, client=None):
+        """
+        Initialize the agent service.
+
+        Args:
+            client: Optional ZeroDB client instance (for testing)
+        """
+        self._client = client
 
     @property
     def client(self):
         """Lazy initialization of ZeroDB client."""
         if self._client is None:
-            self._client = None
+            self._client = get_zerodb_client()
         return self._client
 
     def _generate_agent_id(self) -> str:
