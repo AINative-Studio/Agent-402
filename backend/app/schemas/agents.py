@@ -1,0 +1,150 @@
+"""
+Agent API schemas for request/response validation.
+These schemas define the contract with API consumers per DX Contract.
+Epic 12, Issue 1: Agent profiles with did, role, name, description, scope.
+"""
+from datetime import datetime
+from typing import Optional, List
+from pydantic import BaseModel, Field
+from app.models.agent import AgentScope
+
+
+class AgentCreateRequest(BaseModel):
+    """
+    Request schema for POST /v1/public/{project_id}/agents.
+    Creates a new agent profile within a project.
+    """
+    did: str = Field(
+        ...,
+        description="Decentralized Identifier for the agent",
+        min_length=1,
+        max_length=256,
+        examples=["did:web:agent.example.com:researcher-01"]
+    )
+    role: str = Field(
+        ...,
+        description="Agent role (e.g., researcher, analyst, executor)",
+        min_length=1,
+        max_length=100,
+        examples=["researcher"]
+    )
+    name: str = Field(
+        ...,
+        description="Human-readable agent name",
+        min_length=1,
+        max_length=200,
+        examples=["Research Agent Alpha"]
+    )
+    description: Optional[str] = Field(
+        None,
+        description="Agent description and purpose",
+        max_length=1000,
+        examples=["Specialized agent for financial research and data gathering"]
+    )
+    scope: AgentScope = Field(
+        AgentScope.PROJECT,
+        description="Operational scope of the agent"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "did": "did:web:agent.example.com:researcher-01",
+                "role": "researcher",
+                "name": "Research Agent Alpha",
+                "description": "Specialized agent for financial research and data gathering",
+                "scope": "PROJECT"
+            }
+        }
+
+
+class AgentResponse(BaseModel):
+    """
+    Response schema for agent operations.
+    Returns full agent profile with all fields.
+    """
+    id: str = Field(..., description="Unique agent identifier")
+    did: str = Field(..., description="Decentralized Identifier for the agent")
+    role: str = Field(..., description="Agent role")
+    name: str = Field(..., description="Human-readable agent name")
+    description: Optional[str] = Field(None, description="Agent description and purpose")
+    scope: AgentScope = Field(..., description="Operational scope of the agent")
+    project_id: str = Field(..., description="Project this agent belongs to")
+    created_at: datetime = Field(..., description="Timestamp of agent creation")
+    updated_at: Optional[datetime] = Field(None, description="Timestamp of last update")
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id": "agent_abc123",
+                "did": "did:web:agent.example.com:researcher-01",
+                "role": "researcher",
+                "name": "Research Agent Alpha",
+                "description": "Specialized agent for financial research and data gathering",
+                "scope": "PROJECT",
+                "project_id": "proj_demo_u1_001",
+                "created_at": "2025-01-01T00:00:00Z",
+                "updated_at": "2025-01-01T00:00:00Z"
+            }
+        }
+
+
+class AgentListResponse(BaseModel):
+    """
+    Response schema for listing agents.
+    Returns array of agents for a project.
+    """
+    agents: List[AgentResponse] = Field(
+        default_factory=list,
+        description="List of agents in the project"
+    )
+    total: int = Field(..., description="Total number of agents")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "agents": [
+                    {
+                        "id": "agent_abc123",
+                        "did": "did:web:agent.example.com:researcher-01",
+                        "role": "researcher",
+                        "name": "Research Agent Alpha",
+                        "description": "Specialized agent for financial research",
+                        "scope": "PROJECT",
+                        "project_id": "proj_demo_u1_001",
+                        "created_at": "2025-01-01T00:00:00Z",
+                        "updated_at": "2025-01-01T00:00:00Z"
+                    },
+                    {
+                        "id": "agent_xyz789",
+                        "did": "did:web:agent.example.com:analyst-02",
+                        "role": "analyst",
+                        "name": "Analysis Agent Beta",
+                        "description": "Data analysis and reporting agent",
+                        "scope": "PROJECT",
+                        "project_id": "proj_demo_u1_001",
+                        "created_at": "2025-01-02T00:00:00Z",
+                        "updated_at": "2025-01-02T00:00:00Z"
+                    }
+                ],
+                "total": 2
+            }
+        }
+
+
+class ErrorResponse(BaseModel):
+    """
+    Standard error response per DX Contract.
+    All errors return { detail, error_code }.
+    """
+    detail: str = Field(..., description="Human-readable error message")
+    error_code: str = Field(..., description="Machine-readable error code")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "detail": "Agent not found: agent_abc123",
+                "error_code": "AGENT_NOT_FOUND"
+            }
+        }

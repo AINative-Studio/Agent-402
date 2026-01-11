@@ -10,6 +10,11 @@ from app.core.errors import APIError, format_error_response
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 from app.api.embeddings import router as embeddings_router
+from app.api.agent_memory import router as agent_memory_router
+from app.api.x402_requests import router as x402_requests_router
+from app.api.agents import router as agents_router
+from app.api.compliance_events import router as compliance_events_router
+from app.api.runs import router as runs_router
 
 
 # Create FastAPI application
@@ -80,6 +85,11 @@ async def health_check():
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(embeddings_router)
+app.include_router(agent_memory_router)
+app.include_router(x402_requests_router)
+app.include_router(agents_router)
+app.include_router(compliance_events_router)
+app.include_router(runs_router)
 
 
 # Root endpoint

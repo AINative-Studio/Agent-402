@@ -27,7 +27,17 @@ from app.api.auth import router as auth_router
 # Use embeddings API with Issue #16 implementation for batch embed-and-store
 from app.api.embeddings_issue16 import router as embeddings_router
 from app.api.vectors import router as vectors_router
-from app.middleware import APIKeyAuthMiddleware
+# Epic 12 Issue 3: Compliance events API
+from app.api.compliance_events import router as compliance_events_router
+# Epic 12 Issue 1: Agent profiles API
+from app.api.agents import router as agents_router
+# Epic 12 Issue 2: Agent memory persistence
+from app.api.agent_memory import router as agent_memory_router
+# Epic 12 Issue 4: X402 requests linked to agent + task
+from app.api.x402_requests import router as x402_requests_router
+# Epic 12 Issue 5: Agent run replay from ZeroDB records
+from app.api.runs import router as runs_router
+from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
 # Create FastAPI application
@@ -39,6 +49,11 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
+
+# Immutable Record middleware - enforces append-only semantics
+# Per Epic 12 Issue 6 and PRD Section 10: Non-repudiation
+# Must be added before authentication to reject mutations early
+app.add_middleware(ImmutableMiddleware)
 
 # API Key Authentication middleware - must be added before CORS
 # Per Epic 2 Story 1: All /v1/public/* endpoints require X-API-Key
@@ -103,6 +118,11 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(embeddings_router)
 app.include_router(vectors_router)
+app.include_router(compliance_events_router)
+app.include_router(agents_router)
+app.include_router(agent_memory_router)
+app.include_router(x402_requests_router)
+app.include_router(runs_router)
 
 
 # Root endpoint

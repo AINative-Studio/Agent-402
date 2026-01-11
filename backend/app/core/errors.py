@@ -198,6 +198,97 @@ class TokenExpiredAPIError(APIError):
         )
 
 
+class AgentNotFoundError(APIError):
+    """
+    Raised when agent is not found.
+
+    Epic 12 Issue 1: Agent profiles API
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: AGENT_NOT_FOUND
+        - detail: Message including agent ID
+    """
+
+    def __init__(self, agent_id: str):
+        detail = f"Agent not found: {agent_id}" if agent_id else "Agent not found"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="AGENT_NOT_FOUND",
+            detail=detail
+        )
+
+
+class DuplicateAgentDIDError(APIError):
+    """
+    Raised when attempting to create an agent with a duplicate DID.
+
+    Epic 12 Issue 1: Agent profiles API
+
+    Returns:
+        - HTTP 409 (Conflict)
+        - error_code: DUPLICATE_AGENT_DID
+        - detail: Message about duplicate DID
+    """
+
+    def __init__(self, did: str, project_id: str):
+        detail = f"Agent with DID '{did}' already exists in project: {project_id}"
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="DUPLICATE_AGENT_DID",
+            detail=detail
+        )
+
+
+class ImmutableRecordError(APIError):
+    """
+    Raised when an attempt is made to update or delete an immutable record.
+
+    Epic 12 Issue 6: Append-only enforcement for agent records.
+    PRD Section 10: Non-repudiation
+
+    Protected tables (append-only):
+    - agents: Agent registration and configuration
+    - agent_memory: Agent recall and learning data
+    - compliance_events: Regulatory audit trail
+    - x402_requests: Payment protocol transactions
+
+    Returns:
+        - HTTP 403 (Forbidden)
+        - error_code: IMMUTABLE_RECORD
+        - detail: Message explaining the immutability constraint
+    """
+
+    def __init__(
+        self,
+        table_name: str,
+        operation: str = "modify",
+        detail: Optional[str] = None
+    ):
+        """
+        Initialize ImmutableRecordError.
+
+        Args:
+            table_name: Name of the immutable table
+            operation: The attempted operation (update/delete)
+            detail: Optional custom detail message
+        """
+        if detail is None:
+            detail = (
+                f"Cannot {operation} records in '{table_name}' table. "
+                f"This table is append-only for audit trail integrity. "
+                f"Per PRD Section 10: Agent records are immutable for non-repudiation."
+            )
+
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            error_code="IMMUTABLE_RECORD",
+            detail=detail
+        )
+        self.table_name = table_name
+        self.operation = operation
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.
