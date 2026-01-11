@@ -24,7 +24,8 @@ from app.core.middleware import (
 )
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
-from app.api.embeddings import router as embeddings_router
+# Use embeddings API with Issue #16 implementation for batch embed-and-store
+from app.api.embeddings_issue16 import router as embeddings_router
 from app.middleware import APIKeyAuthMiddleware
 
 

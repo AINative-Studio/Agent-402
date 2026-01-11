@@ -51,12 +51,19 @@ If your code follows this contract, **ZeroDB will not silently break it**.
 * **Default embedding model:**
   `BAAI/bge-small-en-v1.5` → **384 dimensions**
 * If `model` is omitted, **384-dim is guaranteed**
-* If `model` is specified:
-
-  * The same model **must** be used for store + search
+* **Model Consistency Requirement (CRITICAL):**
+  * The **SAME model MUST be used** for both:
+    * `embed-and-store` (storing documents)
+    * `search` (querying documents)
+  * Within a namespace, mixing models causes:
+    * Poor search results
+    * Semantic drift
+    * Low similarity scores
+  * **See [Model Consistency Guide](/docs/api/MODEL_CONSISTENCY_GUIDE.md) for details**
 * Dimension mismatches always return:
-
-  * `DIMENSION_MISMATCH`
+  * `DIMENSION_MISMATCH` error with clear message
+* **Best Practice:** Define model as configuration constant
+* **Best Practice:** Use separate namespaces for different models
 
 ---
 
