@@ -313,8 +313,10 @@ class EmbeddingService:
         metadata_list: Optional[List[Dict[str, Any]]] = None,
         namespace: str = "default",
         project_id: Optional[str] = None,
-        user_id: Optional[str] = None
-    ) -> Tuple[List[str], str, int, int]:
+        user_id: Optional[str] = None,
+        upsert: bool = False,
+        vector_ids: Optional[List[str]] = None
+    ) -> Tuple[List[str], str, int, int, List[bool]]:
         """
         Generate embeddings for multiple documents and store them.
 
@@ -324,6 +326,13 @@ class EmbeddingService:
         - Support optional namespace for logical organization
         - Return vector IDs for all stored documents
 
+        Issue #18 Implementation (PRD §10 Replayability):
+        - When upsert=true and vector_id exists: UPDATE the existing vector
+        - When upsert=false and vector_id exists: Raise VECTOR_ALREADY_EXISTS error
+        - When upsert=true and vector_id doesn't exist: INSERT as new vector
+        - Track and return which vectors were inserted vs updated
+        - Ensure idempotent behavior for replay scenarios
+
         Args:
             documents: List of text documents to embed and store
             model: Optional model name (defaults to DEFAULT_EMBEDDING_MODEL)
@@ -331,14 +340,22 @@ class EmbeddingService:
             namespace: Logical namespace for organization
             project_id: Project identifier for scoping
             user_id: User/agent identifier
+            upsert: Whether to update existing vectors (default: False)
+            vector_ids: Optional list of custom vector IDs
 
         Returns:
-            Tuple of (vector_ids, model_used, dimensions, processing_time_ms)
+            Tuple of (vector_ids, model_used, dimensions, processing_time_ms, created_flags)
+            - created_flags: List of booleans (True=inserted, False=updated)
 
         Raises:
             APIError: If model is not supported
+            APIError: If vector_id exists and upsert=false (VECTOR_ALREADY_EXISTS)
             ValueError: If metadata_list length doesn't match documents length
+            ValueError: If vector_ids length doesn't match documents length
         """
+        from app.services.vector_store_service import vector_store_service
+        from app.core.errors import VectorAlreadyExistsError
+
         start_time = time.time()
 
         # Validate metadata_list length if provided
@@ -347,50 +364,63 @@ class EmbeddingService:
                 f"Metadata list length ({len(metadata_list)}) must match documents length ({len(documents)})"
             )
 
+        # Validate vector_ids length if provided
+        if vector_ids is not None and len(vector_ids) != len(documents):
+            raise ValueError(
+                f"vector_ids length ({len(vector_ids)}) must match documents length ({len(documents)})"
+            )
+
         # Apply default model if not provided
         model_used = self.get_model_or_default(model)
         dimensions = self.get_dimensions_for_model(model_used)
 
-        vector_ids = []
+        result_vector_ids = []
+        created_flags = []  # Track whether each vector was inserted (True) or updated (False)
 
         # Process each document
         for idx, document in enumerate(documents):
             # Generate embedding for this document
             embedding, _, _, _ = self.generate_embedding(document, model_used)
 
-            # Generate vector ID
-            vector_id = f"vec_{uuid.uuid4().hex[:16]}"
+            # Get vector_id for this document (provided or auto-generated)
+            if vector_ids is not None:
+                vector_id = vector_ids[idx]
+            else:
+                vector_id = f"vec_{uuid.uuid4().hex[:16]}"
 
             # Get metadata for this document if provided
             doc_metadata = metadata_list[idx] if metadata_list else {}
 
-            # Add namespace to metadata
-            if namespace != "default":
-                doc_metadata["namespace"] = namespace
-
-            # Prepare vector record
-            stored_at = datetime.utcnow().isoformat() + "Z"
-            vector_record = {
-                "vector_id": vector_id,
-                "embedding": embedding,
-                "text": document,
-                "model": model_used,
-                "dimensions": dimensions,
-                "metadata": doc_metadata,
-                "namespace": namespace,
-                "project_id": project_id,
-                "user_id": user_id,
-                "created_at": stored_at,
-                "updated_at": stored_at
-            }
-
-            # Store vector
-            self._vector_store[vector_id] = vector_record
-            vector_ids.append(vector_id)
+            # Store vector using vector_store_service (Issue #17: with namespace support)
+            # Issue #18: Handle upsert behavior
+            try:
+                storage_result = vector_store_service.store_vector(
+                    project_id=project_id or "default",
+                    user_id=user_id or "system",
+                    text=document,
+                    embedding=embedding,
+                    model=model_used,
+                    dimensions=dimensions,
+                    namespace=namespace,
+                    metadata=doc_metadata,
+                    vector_id=vector_id,
+                    upsert=upsert
+                )
+                result_vector_ids.append(storage_result["vector_id"])
+                created_flags.append(storage_result["created"])
+            except ValueError as e:
+                # Convert ValueError from vector_store_service to APIError
+                if "already exists" in str(e):
+                    raise VectorAlreadyExistsError(
+                        vector_id=vector_id,
+                        namespace=namespace
+                    )
+                else:
+                    raise
 
         processing_time = int((time.time() - start_time) * 1000)
 
-        return vector_ids, model_used, dimensions, processing_time
+        return result_vector_ids, model_used, dimensions, processing_time, created_flags
 
 
 # Singleton instance

@@ -11,9 +11,16 @@ This service provides:
 - Cross-namespace isolation guarantees
 - Advanced metadata filtering (equals, contains, in, etc.)
 
-Per PRD §6: Agent-scoped memory for multi-agent systems.
+Per PRD Section 6: Agent-scoped memory for multi-agent systems.
 Per Epic 4 Story 2: Namespace scopes retrieval correctly.
 Per Epic 5 Story 4 (Issue #24): Filter search results by metadata.
+
+Issue #17 Namespace Rules:
+- Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+- Max length: 64 characters
+- Cannot start with underscore or hyphen
+- Cannot be empty if provided
+- INVALID_NAMESPACE (422) for invalid format
 """
 import uuid
 from typing import List, Dict, Any, Optional
@@ -21,11 +28,13 @@ from datetime import datetime
 import logging
 from app.services.metadata_filter import MetadataFilter
 
+from app.core.namespace_validator import (
+    validate_namespace,
+    NamespaceValidationError,
+    DEFAULT_NAMESPACE
+)
+
 logger = logging.getLogger(__name__)
-
-
-# Default namespace constant
-DEFAULT_NAMESPACE = "default"
 
 
 class VectorStoreService:
@@ -37,6 +46,12 @@ class VectorStoreService:
     - Default namespace MUST be isolated from named namespaces
     - Namespace parameter properly scopes both storage and retrieval
     - Namespace validation and filtering enforced at storage layer
+
+    Issue #17 Namespace Rules:
+    - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+    - Max length: 64 characters
+    - Cannot start with underscore or hyphen
+    - Cannot be empty if provided
 
     Storage Structure:
     - Vectors are indexed by: project_id -> namespace -> vector_id
@@ -52,7 +67,10 @@ class VectorStoreService:
 
     def _validate_namespace(self, namespace: Optional[str] = None) -> str:
         """
-        Validate and normalize namespace parameter.
+        Validate and normalize namespace parameter using centralized validator.
+
+        Issue #17: Uses centralized namespace_validator module for consistent
+        validation across all API endpoints.
 
         Args:
             namespace: Optional namespace string
@@ -61,29 +79,13 @@ class VectorStoreService:
             str: Validated namespace (defaults to DEFAULT_NAMESPACE if None)
 
         Raises:
-            ValueError: If namespace contains invalid characters
+            ValueError: If namespace format is invalid per Issue #17 rules
         """
-        if namespace is None:
-            return DEFAULT_NAMESPACE
-
-        # Namespace validation rules
-        if not isinstance(namespace, str):
-            raise ValueError("Namespace must be a string")
-
-        if not namespace.strip():
-            raise ValueError("Namespace cannot be empty or whitespace")
-
-        # Allow alphanumeric, hyphens, underscores, and dots
-        # Prevent path traversal and injection attacks
-        if not all(c.isalnum() or c in ['-', '_', '.'] for c in namespace):
-            raise ValueError(
-                "Namespace can only contain alphanumeric characters, hyphens, underscores, and dots"
-            )
-
-        if len(namespace) > 128:
-            raise ValueError("Namespace cannot exceed 128 characters")
-
-        return namespace
+        try:
+            return validate_namespace(namespace)
+        except NamespaceValidationError as e:
+            # Convert to ValueError for backward compatibility
+            raise ValueError(e.message)
 
     def _ensure_project_namespace(self, project_id: str, namespace: str) -> None:
         """
@@ -136,10 +138,10 @@ class VectorStoreService:
             Dictionary with storage confirmation and vector metadata
 
         Raises:
-            ValueError: If namespace is invalid
+            ValueError: If namespace is invalid per Issue #17 rules
             ValueError: If vector_id already exists and upsert=False
         """
-        # Validate and normalize namespace
+        # Validate and normalize namespace using centralized validator
         validated_namespace = self._validate_namespace(namespace)
 
         # Ensure storage structure exists
@@ -258,7 +260,7 @@ class VectorStoreService:
         # Issue #24: Validate metadata filter format
         MetadataFilter.validate_filter(metadata_filter)
 
-        # Validate and normalize namespace
+        # Validate and normalize namespace using centralized validator (Issue #17)
         validated_namespace = self._validate_namespace(namespace)
 
         # Check if project and namespace exist
@@ -402,7 +404,7 @@ class VectorStoreService:
             Dictionary with namespace statistics
 
         Raises:
-            ValueError: If namespace is invalid
+            ValueError: If namespace is invalid per Issue #17 rules
         """
         validated_namespace = self._validate_namespace(namespace)
 

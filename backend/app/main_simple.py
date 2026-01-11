@@ -14,6 +14,8 @@ from app.api.auth import router as auth_router
 from app.api.embeddings import router as embeddings_router
 from app.api.vectors import router as vectors_router
 from app.api.events import router as events_router
+# Epic 4 Issue 16: Embed-and-store endpoint
+from app.api.embeddings_embed_store import router as embed_store_router
 from app.api.agent_memory import router as agent_memory_router
 from app.api.x402_requests import router as x402_requests_router
 from app.api.agents import router as agents_router
@@ -127,6 +129,8 @@ async def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(projects_router)
+# Epic 4 Issue 16: Include embed-store router
+app.include_router(embed_store_router)
 app.include_router(embeddings_router)
 app.include_router(vectors_router)
 app.include_router(events_router)

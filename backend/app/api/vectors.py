@@ -35,7 +35,8 @@ from app.schemas.vectors import (
     VectorUpsertRequest,
     VectorUpsertResponse,
     VectorSearchRequest,
-    VectorSearchResponse
+    VectorSearchResponse,
+    VectorListResponse
 )
 from app.schemas.vector import VectorListResponse
 from app.schemas.project import ErrorResponse

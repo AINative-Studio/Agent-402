@@ -441,6 +441,82 @@ class InvalidTimestampError(APIError):
         )
 
 
+class VectorAlreadyExistsError(APIError):
+    """
+    Raised when attempting to store a vector with an ID that already exists.
+
+    Epic 4 Issue #18: Upsert behavior for embed-and-store operations.
+    PRD Section 10: Replayability - deterministic error for duplicate IDs.
+
+    When upsert=false and a vector_id already exists, this error is raised
+    to prevent accidental duplication. Use upsert=true for idempotent updates.
+
+    Returns:
+        - HTTP 409 (Conflict)
+        - error_code: VECTOR_ALREADY_EXISTS
+        - detail: Message about duplicate vector ID
+    """
+
+    def __init__(self, vector_id: str, namespace: str = "default"):
+        """
+        Initialize VectorAlreadyExistsError.
+
+        Args:
+            vector_id: The duplicate vector ID
+            namespace: The namespace where the conflict occurred
+        """
+        detail = (
+            f"Vector with ID '{vector_id}' already exists in namespace '{namespace}'. "
+            f"Use upsert=true to update existing vectors."
+        )
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="VECTOR_ALREADY_EXISTS",
+            detail=detail
+        )
+        self.vector_id = vector_id
+        self.namespace = namespace
+
+
+class InvalidNamespaceError(APIError):
+    """
+    Raised when namespace format is invalid.
+
+    Epic 4 Issue #17: Namespace scopes retrieval correctly.
+    PRD Section 6: Agent-scoped memory.
+
+    Namespace validation rules:
+    - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+    - Max length: 64 characters
+    - Cannot start with underscore or hyphen
+    - Cannot be empty if provided
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: INVALID_NAMESPACE
+        - detail: Message explaining the validation failure
+    """
+
+    def __init__(self, detail: str = "Invalid namespace format"):
+        """
+        Initialize InvalidNamespaceError.
+
+        Args:
+            detail: Human-readable error message explaining the validation failure
+        """
+        if not detail:
+            detail = (
+                "Invalid namespace format. "
+                "Namespace must contain only alphanumeric characters, underscores, and hyphens. "
+                "Max length: 64 characters. Cannot start with underscore or hyphen."
+            )
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="INVALID_NAMESPACE",
+            detail=detail
+        )
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

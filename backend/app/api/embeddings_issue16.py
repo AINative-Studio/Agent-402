@@ -1,10 +1,12 @@
 """
-Embeddings API endpoints - Issue #16 Implementation.
+Embeddings API endpoints - Issue #16, Issue #18, and Issue #19 Implementation.
 Implements Epic 4 Story 1: embed-and-store endpoint for batch document storage.
+Implements Epic 4 Story 3 (Issue #18): upsert behavior for vector updates.
+Implements Epic 4 Story 4 (Issue #19): Response includes vectors_stored, model, dimensions.
 
 Endpoints:
 - POST /v1/public/{project_id}/embeddings/generate
-- POST /v1/public/{project_id}/embeddings/embed-and-store (Issue #16)
+- POST /v1/public/{project_id}/embeddings/embed-and-store (Issue #16, #18, #19)
 - POST /v1/public/{project_id}/embeddings/search (Issue #22)
 - GET /embeddings/models
 """
@@ -25,7 +27,8 @@ from app.schemas.embeddings import (
 from app.schemas.embeddings_store import (
     EmbedAndStoreRequest,
     EmbedAndStoreResponse,
-    VectorStorageResult
+    VectorStorageResult,
+    VectorDetail
 )
 from app.schemas.project import ErrorResponse
 from app.services.embedding_service import embedding_service
@@ -137,6 +140,10 @@ async def generate_embedding(
             "description": "Model not found",
             "model": ErrorResponse
         },
+        409: {
+            "description": "Vector already exists (when upsert=false and vector_id exists)",
+            "model": ErrorResponse
+        },
         422: {
             "description": "Validation error",
             "model": ErrorResponse
@@ -154,6 +161,13 @@ async def generate_embedding(
     - Support optional namespace for logical organization
     - Return vector IDs for all stored documents
 
+    **Epic 4 Story 3 (Issue #18) - Upsert Behavior (PRD §10 Replayability):**
+    - When `upsert=true` and `vector_id` exists: UPDATE existing vector (idempotent)
+    - When `upsert=false` (default) and `vector_id` exists: Return 409 VECTOR_ALREADY_EXISTS
+    - When `upsert=true` and `vector_id` doesn't exist: INSERT as new vector
+    - Response includes `vectors_inserted` and `vectors_updated` counts
+    - Enables deterministic replay of agent workflows
+
     **Per PRD §6 (Agent memory foundation):**
     - Store document text and embedding vector in ZeroDB
     - Support metadata for document classification
@@ -162,16 +176,20 @@ async def generate_embedding(
     **Default Behavior:**
     - When `model` is omitted, uses BAAI/bge-small-en-v1.5 (384 dimensions)
     - When `namespace` is omitted, uses 'default'
+    - When `upsert` is omitted, defaults to false (error on duplicate)
     - Metadata is optional and can be provided per document
 
-    **Response Fields (Issue #19):**
-    - vector_ids: List of IDs for stored vectors
-    - vectors_stored: Number of vectors successfully stored (Issue #19 - required field)
+    **Response Fields (Issue #18, #19):**
+    - success: Boolean indicating operation success (always true for 200 response)
+    - vectors_stored: Total number of vectors stored (Issue #19 - required field)
+    - vectors_inserted: Number of new vectors created (Issue #18)
+    - vectors_updated: Number of existing vectors updated (Issue #18)
     - model: Model used for embedding generation (Issue #19 - required field)
     - dimensions: Dimensionality of embedding vectors (Issue #19 - required field)
-    - namespace: Namespace where vectors were stored
-    - results: Detailed results for each document
-    - processing_time_ms: Total processing time (Issue #19 - included when available)
+    - namespace: Namespace where vectors were stored (Issue #19 - required field)
+    - vector_ids: List of all vector IDs (Issue #19 - required field)
+    - processing_time_ms: Total processing time in ms (Issue #19 - required field)
+    - details: Per-vector status (only if include_details=true)
 
     **Supported Models:**
     - BAAI/bge-small-en-v1.5: 384 dimensions (default)
@@ -193,44 +211,82 @@ async def embed_and_store(
     - Supports namespace for logical organization
     - Returns vector IDs and confirmation for all stored documents
 
+    Issue #18 Implementation:
+    - Supports upsert parameter for update vs create behavior
+    - Tracks vectors_inserted and vectors_updated counts
+
+    Issue #19 Implementation:
+    - Returns comprehensive metadata: success, vectors_stored, model, dimensions
+    - Optional include_details parameter for per-vector status
+
     Args:
         project_id: Project identifier
         request: Embed and store request with documents, model, metadata, namespace
         current_user: Authenticated user ID
 
     Returns:
-        EmbedAndStoreResponse with vector IDs, count, and detailed results
+        EmbedAndStoreResponse with success, vector IDs, count, and metadata
     """
     # Generate embeddings and store for all documents
-    vector_ids, model_used, dimensions, processing_time = (
+    # Issue #18: Pass upsert and vector_ids parameters
+    vector_ids, model_used, dimensions, processing_time, created_flags = (
         embedding_service.batch_embed_and_store(
             documents=request.documents,
             model=request.model,
             metadata_list=request.metadata,
             namespace=request.namespace,
             project_id=project_id,
-            user_id=current_user
+            user_id=current_user,
+            upsert=request.upsert,
+            vector_ids=request.vector_ids
         )
     )
 
-    # Build detailed results for each document
+    # Issue #18: Calculate inserted vs updated counts
+    vectors_inserted = sum(1 for created in created_flags if created)
+    vectors_updated = sum(1 for created in created_flags if not created)
+
+    # Issue #19: Build details array if include_details=true
+    details = None
+    if request.include_details:
+        details = []
+        for idx, vector_id in enumerate(vector_ids):
+            # Create text preview (first 50 chars with ellipsis if longer)
+            text = request.documents[idx]
+            text_preview = text[:47] + "..." if len(text) > 50 else text
+
+            # Determine status based on created flag
+            status = "inserted" if created_flags[idx] else "updated"
+
+            details.append(VectorDetail(
+                vector_id=vector_id,
+                text_preview=text_preview,
+                status=status
+            ))
+
+    # Build legacy results for backward compatibility (optional)
     results = []
     for idx, vector_id in enumerate(vector_ids):
         result = VectorStorageResult(
             vector_id=vector_id,
             document=request.documents[idx],
-            metadata=request.metadata[idx] if request.metadata else None
+            metadata=request.metadata[idx] if request.metadata else None,
+            created=created_flags[idx]
         )
         results.append(result)
 
+    # Issue #18/#19: Return complete response with all required fields
     return EmbedAndStoreResponse(
-        vector_ids=vector_ids,
-        vectors_stored=len(vector_ids),  # Issue #19: Use vectors_stored field
+        vectors_stored=len(vector_ids),
+        vectors_inserted=vectors_inserted,  # Issue #18: New vectors created
+        vectors_updated=vectors_updated,  # Issue #18: Existing vectors updated
         model=model_used,
         dimensions=dimensions,
+        vector_ids=vector_ids,
         namespace=request.namespace,
         results=results,
-        processing_time_ms=processing_time
+        processing_time_ms=processing_time,
+        details=details  # Issue #18/#19: Per-vector status if include_details=true
     )
 
 

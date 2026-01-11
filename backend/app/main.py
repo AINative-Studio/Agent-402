@@ -29,6 +29,8 @@ from app.api.auth import router as auth_router
 # Use full embeddings API with generate, embed-and-store, and search endpoints
 # Includes Issue #17 namespace scoping and Issue #23 search namespace parameter
 from app.api.embeddings import router as embeddings_router
+# Epic 4 Issue 16: Embed-and-store endpoint with texts field
+from app.api.embeddings_embed_store import router as embed_store_router
 from app.api.vectors import router as vectors_router
 # Epic 8: Events API
 from app.api.events import router as events_router
@@ -130,6 +132,8 @@ async def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(projects_router)
+# Epic 4 Issue 16: Include embed-store router first (texts field version takes precedence)
+app.include_router(embed_store_router)
 app.include_router(embeddings_router)
 app.include_router(vectors_router)
 app.include_router(events_router)

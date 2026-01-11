@@ -623,8 +623,16 @@ Request Body:
 
 ## Related Documentation
 
+### Embed-Store Specific Guides
+
+- **[Model Consistency for Embed-Store](/docs/api/MODEL_CONSISTENCY_EMBED_STORE.md)** - Comprehensive embed-and-store documentation
+- **[Embed-Store Model Quick Reference](/docs/quick-reference/EMBED_STORE_MODEL_GUIDE.md)** - Quick lookup card for embed-store
+
+### General Documentation
+
 - [DX Contract Section 3: Embeddings & Vectors](/DX-Contract.md)
 - [Embeddings API Specification](/docs/api/embeddings-api-spec.md)
+- [Embeddings Store Search Spec](/docs/api/embeddings-store-search-spec.md)
 - [PRD Section 10: Determinism](/prd.md)
 - [ZeroDB Developer Guide](/datamodel.md)
 
@@ -635,7 +643,8 @@ Request Body:
 | Version | Date | Changes |
 |---------|------|---------|
 | v1.0 | 2026-01-10 | Initial guide created (Issue #20) |
+| v1.1 | 2026-01-11 | Added references to embed-store specific documentation |
 
 ---
 
-**Remember: Same namespace → Same model → Successful search** 🎯
+**Remember: Same namespace -> Same model -> Successful search**

@@ -1,7 +1,8 @@
 """
 Embeddings API schemas for request/response validation.
-Implements Epic 3 (Embeddings: Generate) per backlog.md and PRD §6.
+Implements Epic 3 (Embeddings: Generate) per backlog.md and PRD Section 6.
 GitHub Issue #13: Multi-model support with dimension validation.
+GitHub Issue #17: Namespace scopes retrieval correctly.
 
 Per DX Contract (Issue #12 & #13):
 - Default model: BAAI/bge-small-en-v1.5 (384 dimensions)
@@ -11,6 +12,13 @@ Per DX Contract (Issue #12 & #13):
 - Support multiple models with correct dimensions
 - Include processing_time_ms for observability
 - Return { detail, error_code } for errors
+
+Issue #17 Namespace Rules:
+- Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+- Max length: 64 characters
+- Cannot start with underscore or hyphen
+- Cannot be empty if provided
+- INVALID_NAMESPACE (422) for invalid format
 """
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
@@ -20,6 +28,11 @@ from app.core.embedding_models import (
     get_model_dimensions,
     get_supported_models,
     EMBEDDING_MODEL_SPECS
+)
+from app.core.namespace_validator import (
+    validate_namespace as _validate_namespace_func,
+    NamespaceValidationError,
+    DEFAULT_NAMESPACE
 )
 
 # Export for backward compatibility with embedding_service.py
@@ -64,7 +77,7 @@ class EmbeddingGenerateRequest(BaseModel):
         Epic 3 Story 4: Unsupported models return MODEL_NOT_FOUND.
         """
         if v is None:
-            # Use default model (DX Contract §3)
+            # Use default model (DX Contract Section 3)
             return DEFAULT_EMBEDDING_MODEL
 
         if not is_model_supported(v):
@@ -203,11 +216,17 @@ class EmbedAndStoreRequest(BaseModel):
     Epic 4 Story 2 (Issue #17): Namespace scopes retrieval correctly.
     Epic 4 Story 3 (Issue #18): Implement upsert parameter for vector updates.
 
-    DX Contract Guarantee (PRD §10):
+    DX Contract Guarantee (PRD Section 10):
     - When upsert=true: Update existing vector if ID exists (idempotent)
     - When upsert=false: Create new vector or error if ID exists
     - Prevents duplicate vectors with same ID when upsert=false
     - Namespace isolates vectors (Issue #17)
+
+    Issue #17 Namespace Rules:
+    - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+    - Max length: 64 characters
+    - Cannot start with underscore or hyphen
+    - Cannot be empty if provided
     """
     text: str = Field(
         ...,
@@ -223,7 +242,8 @@ class EmbedAndStoreRequest(BaseModel):
         description=(
             "Namespace for vector isolation (Issue #17). "
             "Defaults to 'default'. Vectors in different namespaces are completely isolated. "
-            "Use namespaces to separate agent memories, environments, or tenants."
+            "Use namespaces to separate agent memories, environments, or tenants. "
+            "Valid: alphanumeric, underscore, hyphen. Max 64 chars. Cannot start with _ or -."
         )
     )
     metadata: Optional[Dict[str, Any]] = Field(
@@ -265,6 +285,23 @@ class EmbedAndStoreRequest(BaseModel):
 
         return v
 
+    @validator('namespace')
+    def validate_namespace(cls, v):
+        """
+        Validate namespace per Issue #17 requirements.
+
+        Rules:
+        - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+        - Max length: 64 characters
+        - Cannot start with underscore or hyphen
+        - Cannot be empty if provided
+        - Defaults to 'default' when None or empty
+        """
+        try:
+            return _validate_namespace_func(v)
+        except NamespaceValidationError as e:
+            raise ValueError(e.message)
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -295,7 +332,7 @@ class EmbedAndStoreResponse(BaseModel):
     - Issue #19: MUST include vectors_stored count, model, dimensions
     - Confirms idempotency for upsert operations
     - Provides vector_id for future reference
-    - Per PRD §9: Demo proof requires observable metadata
+    - Per PRD Section 9: Demo proof requires observable metadata
     """
     vectors_stored: int = Field(
         ...,
@@ -359,10 +396,16 @@ class EmbeddingSearchRequest(BaseModel):
     Epic 5 Story 1: Search via /embeddings/search.
     Epic 5 Story 3 (Issue #17): Scope search by namespace.
 
-    DX Contract Guarantee (PRD §10):
+    DX Contract Guarantee (PRD Section 10):
     - Namespace isolation is strictly enforced
     - Default namespace is used when namespace parameter is omitted
     - Vectors in other namespaces are never returned
+
+    Issue #17 Namespace Rules:
+    - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+    - Max length: 64 characters
+    - Cannot start with underscore or hyphen
+    - Cannot be empty if provided
     """
     query: str = Field(
         ...,
@@ -378,7 +421,8 @@ class EmbeddingSearchRequest(BaseModel):
         description=(
             "Namespace to search within (Issue #17). "
             "Defaults to 'default'. Only searches vectors in this namespace. "
-            "Vectors from other namespaces are never returned."
+            "Vectors from other namespaces are never returned. "
+            "Valid: alphanumeric, underscore, hyphen. Max 64 chars. Cannot start with _ or -."
         )
     )
     top_k: int = Field(
@@ -447,9 +491,9 @@ class EmbeddingSearchRequest(BaseModel):
     @validator('namespace')
     def validate_namespace(cls, v):
         """
-        Validate namespace format (Issue #23).
+        Validate namespace format (Issue #23 for search).
 
-        Same validation rules as storage:
+        Search endpoint validation rules (more lenient than storage):
         - Alphanumeric characters, hyphens, underscores, and dots only
         - Max 128 characters
         - No path traversal attempts

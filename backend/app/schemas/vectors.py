@@ -506,3 +506,41 @@ class DimensionValidationError(BaseModel):
                 "supported_dimensions": [384, 768, 1024, 1536]
             }
         }
+
+
+class VectorListResponse(BaseModel):
+    """
+    Response schema for GET /vectors/{namespace}.
+
+    Returns list of vectors in a namespace without embedding data.
+    """
+    vectors: List[Dict[str, Any]] = Field(
+        ...,
+        description="List of vectors (without embeddings)"
+    )
+    namespace: str = Field(
+        ...,
+        description="Namespace that was listed"
+    )
+    total: int = Field(
+        ...,
+        description="Total number of vectors in namespace",
+        ge=0
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "vectors": [
+                    {
+                        "vector_id": "vec_abc123",
+                        "dimensions": 384,
+                        "document": "Test document",
+                        "metadata": {"agent_id": "test_agent"},
+                        "stored_at": "2026-01-10T12:00:00.000Z"
+                    }
+                ],
+                "namespace": "agent_memory",
+                "total": 1
+            }
+        }
