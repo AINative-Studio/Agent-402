@@ -142,7 +142,7 @@ async def embed_and_store(
         doc_metadata = per_doc_metadata[idx] if idx < len(per_doc_metadata) else None
 
         # Call service (which currently returns tuple for single text)
-        count, model_used, dimensions, doc_vector_ids = embed_store_service.embed_and_store(
+        count, model_used, dimensions, doc_vector_ids = await embed_store_service.embed_and_store(
             texts=[document],  # Single document as array
             model=request.model,
             namespace=request.namespace,
