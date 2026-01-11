@@ -517,6 +517,49 @@ class InvalidNamespaceError(APIError):
         )
 
 
+class InvalidMetadataFilterError(APIError):
+    """
+    Raised when metadata filter format is invalid.
+
+    Epic 5 Issue #24: Filter search results by metadata fields.
+    PRD Section 6: Compliance & audit filtering.
+
+    Supported operators:
+    - $eq: equals (default if no operator)
+    - $ne: not equals
+    - $gt, $gte, $lt, $lte: numeric comparisons
+    - $in: value in array
+    - $nin: value not in array
+    - $exists: field exists/doesn't exist
+    - $contains: string contains substring
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: INVALID_METADATA_FILTER
+        - detail: Message explaining the validation failure
+    """
+
+    def __init__(self, detail: str = "Invalid metadata filter format"):
+        """
+        Initialize InvalidMetadataFilterError.
+
+        Args:
+            detail: Human-readable error message explaining the validation failure
+        """
+        if not detail:
+            detail = (
+                "Invalid metadata filter format. "
+                "Filters must be dictionaries with field names as keys. "
+                "Supported operators: $eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $contains. "
+                "Example: {'score': {'$gte': 0.8}, 'status': {'$in': ['active', 'pending']}}"
+            )
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="INVALID_METADATA_FILTER",
+            detail=detail
+        )
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

@@ -222,10 +222,17 @@ class VectorStoreService:
         """
         Search for similar vectors in the specified namespace.
 
-        Issue #17: Namespace scoping is strictly enforced.
+        Issue #23 (Namespace Scoping): Namespace scoping is strictly enforced.
         - Only vectors from the specified namespace are searched
         - Vectors from other namespaces are completely invisible
-        - Default namespace is searched when namespace parameter is None
+        - Default namespace ("default") is searched when namespace parameter is None
+        - If namespace doesn't exist, returns empty results (not an error)
+        - Uses centralized namespace validator from Epic 4
+
+        Issue #22: top_k limits results for predictable replay.
+        - Results are sorted by similarity score (highest first)
+        - Limited to top_k results (default: 10, min: 1, max: 100)
+        - If fewer matches exist than top_k, all matches are returned
 
         Issue #24: Metadata filtering applied AFTER similarity search.
         - Supports common operations: equals, contains, in list, gt, gte, lt, lte, exists
@@ -241,7 +248,7 @@ class VectorStoreService:
             project_id: Project identifier
             query_embedding: Query vector for similarity search
             namespace: Optional namespace to search (defaults to "default")
-            top_k: Maximum number of results to return
+            top_k: Maximum number of results to return (Issue #22: 1-100, default 10)
             similarity_threshold: Minimum similarity score (0.0 to 1.0)
             metadata_filter: Optional metadata filters (Issue #24)
                 Examples:
@@ -255,12 +262,14 @@ class VectorStoreService:
             List of similar vectors with scores, scoped to namespace and filtered by metadata
 
         Raises:
-            ValueError: If namespace or metadata_filter format is invalid
+            ValueError: If namespace format is invalid
+            InvalidMetadataFilterError: If metadata_filter format is invalid (HTTP 422)
         """
         # Issue #24: Validate metadata filter format
+        # Raises InvalidMetadataFilterError (422 INVALID_METADATA_FILTER) if invalid
         MetadataFilter.validate_filter(metadata_filter)
 
-        # Validate and normalize namespace using centralized validator (Issue #17)
+        # Validate and normalize namespace using centralized validator (Issue #17/23)
         validated_namespace = self._validate_namespace(namespace)
 
         # Check if project and namespace exist

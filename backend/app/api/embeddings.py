@@ -5,7 +5,11 @@ Implements Epic 3 (Embeddings: Generate), Epic 4 (Embed & Store), Epic 5 (Search
 Endpoints:
 - POST /v1/public/{project_id}/embeddings/generate (Epic 3, Issue #12)
 - POST /v1/public/{project_id}/embeddings/embed-and-store (Epic 4, Issue #17, #18, #19)
-- POST /v1/public/{project_id}/embeddings/search (Epic 5, Issue #17)
+- POST /v1/public/{project_id}/embeddings/search (Epic 5, Issue #21, #22, #17)
+
+Issue #21 - Search Endpoint:
+- Request: query, model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+- Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
 """
 import time
 from fastapi import APIRouter, Depends, status, Path, HTTPException
@@ -224,6 +228,7 @@ async def embed_and_store(
 @router.post(
     "/{project_id}/embeddings/search",
     response_model=EmbeddingSearchResponse,
+    response_model_exclude_none=True,  # Issue #26: Omit None fields (metadata/embedding) from response
     status_code=status.HTTP_200_OK,
     responses={
         200: {
@@ -235,7 +240,7 @@ async def embed_and_store(
             "model": ErrorResponse
         },
         422: {
-            "description": "Validation error",
+            "description": "Validation error (INVALID_METADATA_FILTER, INVALID_NAMESPACE, or validation error)",
             "model": ErrorResponse
         }
     },
@@ -245,25 +250,43 @@ async def embed_and_store(
 
     **Authentication:** Requires X-API-Key header
 
-    **Epic 5 Story 3 (Issue #17) - Namespace Scoping:**
+    **Issue #21 - Search Endpoint Implementation:**
+    - POST /v1/public/{project_id}/embeddings/search
+    - Request: query (required), model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+    - Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
+
+    **Epic 5 Story 3 (Issue #23) - Namespace Scoping:**
     - Only searches vectors in the specified namespace
     - Vectors from other namespaces are NEVER returned
-    - Default namespace is used when namespace parameter is omitted
+    - Default namespace ("default") is used when namespace parameter is omitted
+    - If namespace doesn't exist, returns empty results (not an error)
     - Namespace isolation is strictly enforced
+    - Uses centralized namespace validator from Epic 4
 
-    **Epic 5 Story 2 - Limit Results:**
-    - Use `top_k` parameter to limit results (1-100)
+    **Epic 5 Story 2 (Issue #22) - Limit Results via top_k:**
+    - Use `top_k` parameter to limit results (default: 10, min: 1, max: 100)
     - Results are sorted by similarity score (descending)
+    - If fewer matches exist than top_k, all available matches are returned
+    - Returns 422 VALIDATION_ERROR if top_k is out of range (1-100)
 
-    **Epic 5 Story 4 - Metadata Filtering:**
-    - Filter results by metadata fields
-    - Only returns vectors matching all specified metadata filters
+    **Epic 5 Story 4 (Issue #24) - Metadata Filtering:**
+    - Filter results by metadata fields using MongoDB-style operators
+    - Supported operators: $eq (default), $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $contains
+    - Filters are applied AFTER similarity search to refine results
+    - Returns 422 INVALID_METADATA_FILTER for invalid filter format
+    - Only returns vectors matching all specified metadata filters (AND logic)
 
     **Epic 5 Story 5 - Similarity Threshold:**
     - Use `similarity_threshold` to filter low-quality matches
     - Only returns results with similarity >= threshold (0.0-1.0)
 
-    **Per PRD §6 (Agent Recall):**
+    **Issue #26 - Conditional Response Fields (PRD Section 9):**
+    - include_metadata (default: true): Include metadata in results
+    - include_embeddings (default: false): Include embedding vectors in results
+    - When false, fields are OMITTED from response (not set to null)
+    - Reduces response payload size for efficiency
+
+    **Per PRD Section 6 (Agent Recall):**
     - Enables agent memory retrieval
     - Supports multi-agent isolation via namespaces
     """
@@ -276,10 +299,17 @@ async def search_vectors(
     """
     Search for similar vectors using semantic similarity.
 
-    Issue #17 Implementation:
+    Issue #21 Implementation:
+    - POST /v1/public/{project_id}/embeddings/search
+    - Request body: query, model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+    - Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
+
+    Issue #23 Implementation (Namespace Scoping):
     - Namespace parameter strictly scopes search results
     - Only vectors from specified namespace are returned
-    - Default namespace is used when namespace is None
+    - Default namespace ("default") is used when namespace is omitted
+    - If namespace doesn't exist, returns empty results (not an error)
+    - Namespace validation uses centralized validator from Epic 4
 
     Args:
         project_id: Project identifier
@@ -297,9 +327,9 @@ async def search_vectors(
         model=request.model
     )
 
-    # Search vectors with namespace scoping (Issue #17)
-    from app.services.vector_store_service import DEFAULT_NAMESPACE
-    namespace_used = request.namespace or DEFAULT_NAMESPACE
+    # Search vectors with namespace scoping (Issue #23)
+    # Note: request.namespace is validated and defaults to "default" via centralized validator
+    namespace_used = request.namespace
 
     # Issue #26: Pass include_metadata and include_embeddings to service
     search_results = vector_store_service.search_vectors(
@@ -314,31 +344,30 @@ async def search_vectors(
         include_embeddings=request.include_embeddings  # Issue #21, #26: Toggle embeddings in results
     )
 
-    # Convert to SearchResult objects
+    # Convert to SearchResult objects per Issue #21 specification
     results = []
     for result in search_results:
+        # Issue #21: Map service fields to API response fields
+        # - vector_id -> id
+        # - similarity -> score
+        # - text -> document
         # Issue #26: Metadata and embeddings are conditionally included by service
         search_result = SearchResult(
-            vector_id=result["vector_id"],
-            namespace=result["namespace"],
-            text=result["text"],
-            similarity=result["similarity"],
-            model=result["model"],
-            dimensions=result["dimensions"],
+            id=result["vector_id"],
+            score=result["similarity"],
+            document=result["text"],
             metadata=result.get("metadata"),  # None if include_metadata=false
-            embedding=result.get("embedding"),  # None if include_embeddings=false
-            created_at=result["created_at"]
+            embedding=result.get("embedding")  # None if include_embeddings=false
         )
         results.append(search_result)
 
     processing_time = int((time.time() - start_time) * 1000)
 
+    # Issue #21: Response includes results, model, namespace, processing_time_ms
     return EmbeddingSearchResponse(
         results=results,
-        query=request.query,
-        namespace=namespace_used,  # Issue #17: Confirm namespace searched
         model=model_used,
-        total_results=len(results),
+        namespace=namespace_used,  # Issue #17: Confirm namespace searched
         processing_time_ms=processing_time
     )
 

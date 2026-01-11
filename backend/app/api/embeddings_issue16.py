@@ -1,14 +1,19 @@
 """
-Embeddings API endpoints - Issue #16, Issue #18, and Issue #19 Implementation.
+Embeddings API endpoints - Issue #16, Issue #18, Issue #19, and Issue #21 Implementation.
 Implements Epic 4 Story 1: embed-and-store endpoint for batch document storage.
 Implements Epic 4 Story 3 (Issue #18): upsert behavior for vector updates.
 Implements Epic 4 Story 4 (Issue #19): Response includes vectors_stored, model, dimensions.
+Implements Epic 5 Story 1 (Issue #21): Search via /embeddings/search.
 
 Endpoints:
 - POST /v1/public/{project_id}/embeddings/generate
 - POST /v1/public/{project_id}/embeddings/embed-and-store (Issue #16, #18, #19)
-- POST /v1/public/{project_id}/embeddings/search (Issue #22)
+- POST /v1/public/{project_id}/embeddings/search (Issue #21, #22)
 - GET /embeddings/models
+
+Issue #21 - Search Endpoint:
+- Request: query, model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+- Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
 """
 import time
 from fastapi import APIRouter, Depends, status, Path
@@ -293,6 +298,7 @@ async def embed_and_store(
 @router.post(
     "/{project_id}/embeddings/search",
     response_model=EmbeddingSearchResponse,
+    response_model_exclude_none=True,  # Issue #26: Omit None fields (metadata/embedding) from response
     status_code=status.HTTP_200_OK,
     responses={
         200: {
@@ -314,6 +320,11 @@ async def embed_and_store(
 
     **Authentication:** Requires X-API-Key header
 
+    **Issue #21 - Search Endpoint Implementation:**
+    - POST /v1/public/{project_id}/embeddings/search
+    - Request: query (required), model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+    - Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
+
     **Issue #22 - top_k Parameter:**
     - Use `top_k` parameter to limit results (1-100, default: 10)
     - Returns only the top K most similar vectors
@@ -333,11 +344,17 @@ async def embed_and_store(
     - Use `similarity_threshold` to filter low-quality matches
     - Only returns results with similarity >= threshold (0.0-1.0)
 
-    **Per PRD §6 (Agent Recall):**
+    **Issue #26 - Conditional Response Fields (PRD Section 9):**
+    - include_metadata (default: true): Include metadata in results
+    - include_embeddings (default: false): Include embedding vectors in results
+    - When false, fields are OMITTED from response (not set to null)
+    - Reduces response payload size for efficiency
+
+    **Per PRD Section 6 (Agent Recall):**
     - Enables agent memory retrieval
     - Supports multi-agent isolation via namespaces
 
-    **Per PRD §10 (Predictable Replay):**
+    **Per PRD Section 10 (Predictable Replay):**
     - Deterministic ordering ensures consistent results
     - Same query produces same result ordering
     """
@@ -349,6 +366,11 @@ async def search_vectors(
 ) -> EmbeddingSearchResponse:
     """
     Search for similar vectors using semantic similarity.
+
+    Issue #21 Implementation:
+    - POST /v1/public/{project_id}/embeddings/search
+    - Request body: query, model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
+    - Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
 
     Issue #22 Implementation:
     - top_k parameter limits results to most similar vectors
@@ -378,10 +400,7 @@ async def search_vectors(
     # Search vectors with namespace scoping (Issue #17) and top_k limiting (Issue #22)
     namespace_used = request.namespace or DEFAULT_NAMESPACE
 
-    # Issue #26: Check if include_metadata and include_embeddings exist
-    include_metadata = getattr(request, 'include_metadata', True)
-    include_embeddings = getattr(request, 'include_embeddings', False)
-
+    # Issue #26: Pass include_metadata and include_embeddings to service
     search_results = vector_store_service.search_vectors(
         project_id=project_id,
         query_embedding=query_embedding,
@@ -389,33 +408,35 @@ async def search_vectors(
         top_k=request.top_k,  # Issue #22: Limit results
         similarity_threshold=request.similarity_threshold,
         metadata_filter=request.metadata_filter,
-        user_id=None  # Allow cross-user search within project
+        user_id=None,  # Allow cross-user search within project
+        include_metadata=request.include_metadata,  # Issue #26: Toggle metadata in results
+        include_embeddings=request.include_embeddings  # Issue #26: Toggle embeddings in results
     )
 
-    # Convert to SearchResult objects
+    # Convert to SearchResult objects per Issue #21 specification
     results = []
     for result in search_results:
+        # Issue #21: Map service fields to API response fields
+        # - vector_id -> id
+        # - similarity -> score
+        # - text -> document
+        # Issue #26: Metadata and embeddings are conditionally included by service
         search_result = SearchResult(
-            vector_id=result["vector_id"],
-            namespace=result["namespace"],
-            text=result["text"],
-            similarity=result["similarity"],
-            model=result["model"],
-            dimensions=result["dimensions"],
-            metadata=result.get("metadata"),
-            embedding=result.get("embedding") if include_embeddings else None,
-            created_at=result["created_at"]
+            id=result["vector_id"],
+            score=result["similarity"],
+            document=result["text"],
+            metadata=result.get("metadata"),  # None if include_metadata=false
+            embedding=result.get("embedding")  # None if include_embeddings=false
         )
         results.append(search_result)
 
     processing_time = int((time.time() - start_time) * 1000)
 
+    # Issue #21: Response includes results, model, namespace, processing_time_ms
     return EmbeddingSearchResponse(
         results=results,
-        query=request.query,
-        namespace=namespace_used,  # Issue #17: Confirm namespace searched
         model=model_used,
-        total_results=len(results),  # Issue #22: Total matches top_k limit
+        namespace=namespace_used,  # Issue #17: Confirm namespace searched
         processing_time_ms=processing_time
     )
 

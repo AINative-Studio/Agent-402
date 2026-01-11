@@ -394,18 +394,30 @@ class EmbeddingSearchRequest(BaseModel):
     Request schema for POST /v1/public/{project_id}/embeddings/search.
 
     Epic 5 Story 1: Search via /embeddings/search.
-    Epic 5 Story 3 (Issue #17): Scope search by namespace.
+    Epic 5 Story 2 (Issue #22): Limit results via top_k parameter.
+    Epic 5 Story 3 (Issue #23): Scope search by namespace.
 
     DX Contract Guarantee (PRD Section 10):
     - Namespace isolation is strictly enforced
-    - Default namespace is used when namespace parameter is omitted
+    - Default namespace ("default") is used when namespace parameter is omitted
     - Vectors in other namespaces are never returned
+    - If namespace doesn't exist, returns empty results (not an error)
+    - top_k limits results for predictable replay (1-100, default: 10)
 
-    Issue #17 Namespace Rules:
+    Issue #22 top_k Requirements:
+    - Default value: 10 if not specified
+    - Minimum value: 1
+    - Maximum value: 100
+    - Returns 422 VALIDATION_ERROR if out of range
+    - Results sorted by similarity score (highest first)
+    - If fewer matches exist than top_k, all matches are returned
+
+    Issue #23 Namespace Rules (per centralized validator from Epic 4):
     - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
     - Max length: 64 characters
     - Cannot start with underscore or hyphen
     - Cannot be empty if provided
+    - INVALID_NAMESPACE (422) for invalid format
     """
     query: str = Field(
         ...,
@@ -419,9 +431,10 @@ class EmbeddingSearchRequest(BaseModel):
     namespace: Optional[str] = Field(
         default=None,
         description=(
-            "Namespace to search within (Issue #17). "
+            "Namespace to search within (Issue #23). "
             "Defaults to 'default'. Only searches vectors in this namespace. "
             "Vectors from other namespaces are never returned. "
+            "If namespace doesn't exist, returns empty results (not an error). "
             "Valid: alphanumeric, underscore, hyphen. Max 64 chars. Cannot start with _ or -."
         )
     )
@@ -445,9 +458,15 @@ class EmbeddingSearchRequest(BaseModel):
     metadata_filter: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
-            "Optional metadata filters to apply to search results (Issue #24). "
-            "Supports: equals, $in, $contains, $gt, $gte, $lt, $lte, $exists, $not_equals. "
-            "Applied AFTER similarity search to refine results."
+            "Optional metadata filters using MongoDB-style operators (Issue #24). "
+            "Filters are applied AFTER similarity search to refine results. "
+            "Supported operators: $eq (equals, default), $ne (not equals), "
+            "$gt, $gte, $lt, $lte (numeric comparisons), "
+            "$in (value in array), $nin (value not in array), "
+            "$exists (field exists/doesn't exist), $contains (string contains). "
+            "Simple equality: {'agent_id': 'agent_1'}. "
+            "With operators: {'score': {'$gte': 0.8}, 'status': {'$in': ['active', 'pending']}}. "
+            "Invalid filters return 422 INVALID_METADATA_FILTER."
         )
     )
     include_metadata: bool = Field(
@@ -488,34 +507,34 @@ class EmbeddingSearchRequest(BaseModel):
 
         return v
 
-    @validator('namespace')
+    @validator('namespace', always=True)
     def validate_namespace(cls, v):
         """
-        Validate namespace format (Issue #23 for search).
+        Validate namespace format per Issue #23.
 
-        Search endpoint validation rules (more lenient than storage):
-        - Alphanumeric characters, hyphens, underscores, and dots only
-        - Max 128 characters
-        - No path traversal attempts
+        Uses centralized namespace validator from Epic 4 (namespace_validator.py)
+        to ensure consistent validation across all API endpoints.
+
+        Note: always=True ensures this validator runs even when namespace is None,
+        allowing the centralized validator to apply the default "default" namespace.
+
+        Rules (per Issue #17/23):
+        - Valid characters: a-z, A-Z, 0-9, underscore, hyphen
+        - Max length: 64 characters
+        - Cannot start with underscore or hyphen
+        - Cannot be empty if provided
+        - Defaults to 'default' when None
+
+        Returns:
+            Validated namespace (or DEFAULT_NAMESPACE if None)
+
+        Raises:
+            ValueError: If namespace format is invalid (triggers INVALID_NAMESPACE error)
         """
-        if v is None:
-            return None  # Will default to "default" in service layer
-
-        # Check for invalid characters
-        if not all(c.isalnum() or c in ['-', '_', '.'] for c in v):
-            raise ValueError(
-                "Namespace can only contain alphanumeric characters, hyphens, underscores, and dots"
-            )
-
-        # Check length
-        if len(v) > 128:
-            raise ValueError("Namespace cannot exceed 128 characters")
-
-        # Check not empty after stripping
-        if not v.strip():
-            raise ValueError("Namespace cannot be empty or whitespace")
-
-        return v
+        try:
+            return _validate_namespace_func(v)
+        except NamespaceValidationError as e:
+            raise ValueError(e.message)
 
     class Config:
         json_schema_extra = {
@@ -540,16 +559,16 @@ class SearchResult(BaseModel):
     """
     Individual search result with similarity score.
 
-    Issue #26 - Conditional field inclusion:
-    - metadata: Optional, only included if include_metadata=true
-    - embedding: Optional, only included if include_embeddings=true
+    Issue #21 - Search endpoint response fields:
+    - id: Unique identifier of the matched vector
+    - score: Similarity score (0.0-1.0)
+    - document: Original text of the matched vector
+    - metadata: Optional, only included if include_metadata=true (Issue #26)
+    - embedding: Optional, only included if include_embeddings=true (Issue #26)
     """
-    vector_id: str = Field(..., description="Unique identifier of the matched vector")
-    namespace: str = Field(..., description="Namespace where vector was found (Issue #17)")
-    text: str = Field(..., description="Original text of the matched vector")
-    similarity: float = Field(..., description="Similarity score (0.0-1.0)", ge=0.0, le=1.0)
-    model: str = Field(..., description="Model used to generate this vector")
-    dimensions: int = Field(..., description="Dimensionality of the vector")
+    id: str = Field(..., description="Unique identifier of the matched vector")
+    score: float = Field(..., description="Similarity score (0.0-1.0)", ge=0.0, le=1.0)
+    document: str = Field(..., description="Original text of the matched vector")
     metadata: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Vector metadata (only if include_metadata=true in request, Issue #26)"
@@ -558,36 +577,50 @@ class SearchResult(BaseModel):
         default=None,
         description="Embedding vector (only if include_embeddings=true in request, Issue #26)"
     )
-    created_at: str = Field(..., description="ISO timestamp when vector was created")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "vec_abc123",
+                "score": 0.92,
+                "document": "Agent compliance check passed",
+                "metadata": {
+                    "agent_id": "compliance_agent",
+                    "task": "compliance_check"
+                }
+            }
+        }
 
 
 class EmbeddingSearchResponse(BaseModel):
     """
     Response schema for POST /v1/public/{project_id}/embeddings/search.
 
+    Issue #21 - Search endpoint response:
+    - results: Array of search results with id, score, document, metadata, embedding
+    - model: Model used for query embedding
+    - namespace: Namespace searched
+    - processing_time_ms: Time taken in milliseconds
+
+    Issue #22 - top_k result limiting:
+    - Results are limited to top_k most similar vectors
+    - Sorted by similarity score (highest first)
+    - If fewer matches exist than top_k, all matches are returned
+
     Epic 5 Story 1-6: Search memory with filters and thresholds.
     Issue #17: Confirms namespace isolation in results.
     """
     results: List[SearchResult] = Field(
         ...,
-        description="List of similar vectors, sorted by similarity (descending)"
-    )
-    query: str = Field(
-        ...,
-        description="Original search query"
-    )
-    namespace: str = Field(
-        ...,
-        description="Namespace that was searched (Issue #17 - confirms scope)"
+        description="List of similar vectors, sorted by similarity score (descending)"
     )
     model: str = Field(
         ...,
         description="Model used for query embedding"
     )
-    total_results: int = Field(
+    namespace: str = Field(
         ...,
-        description="Number of results returned",
-        ge=0
+        description="Namespace that was searched (Issue #17 - confirms scope)"
     )
     processing_time_ms: int = Field(
         ...,
@@ -600,23 +633,17 @@ class EmbeddingSearchResponse(BaseModel):
             "example": {
                 "results": [
                     {
-                        "vector_id": "vec_abc123",
-                        "namespace": "agent_1_memory",
-                        "text": "Agent compliance check passed",
-                        "similarity": 0.92,
-                        "model": "BAAI/bge-small-en-v1.5",
-                        "dimensions": 384,
+                        "id": "vec_abc123",
+                        "score": 0.92,
+                        "document": "Agent compliance check passed",
                         "metadata": {
                             "agent_id": "compliance_agent",
                             "task": "compliance_check"
-                        },
-                        "created_at": "2026-01-10T12:30:00.000Z"
+                        }
                     }
                 ],
-                "query": "compliance check results",
-                "namespace": "agent_1_memory",
                 "model": "BAAI/bge-small-en-v1.5",
-                "total_results": 1,
+                "namespace": "agent_1_memory",
                 "processing_time_ms": 15
             }
         }

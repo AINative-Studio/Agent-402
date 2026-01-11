@@ -4,46 +4,74 @@ Metadata filtering service for vector search.
 Implements Issue #24: Filter search results by metadata fields.
 
 This module provides:
-- Common filter operations: equals, contains, in list
-- Filter validation and parsing
-- Metadata matching logic
+- MongoDB-style filter operators ($eq, $ne, $gt, $gte, $lt, $lte, $in, $nin, $exists, $contains)
+- Filter validation and parsing with proper error codes
+- Metadata matching logic applied AFTER similarity search
 - Type-safe comparisons
 
-Per PRD §6 (Compliance & audit):
+Per PRD Section 6 (Compliance & audit):
 - Enables precise filtering of agent memory and events
 - Supports compliance queries and audit trails
 - Ensures deterministic and reproducible filtering
+
+Supported MongoDB-style operators:
+- $eq: equals (default if no operator)
+- $ne: not equals
+- $gt, $gte, $lt, $lte: numeric comparisons
+- $in: value in array
+- $nin: value not in array
+- $exists: field exists/doesn't exist
+- $contains: string contains substring (extension)
 """
 from typing import Dict, Any, List, Optional
 import logging
+
+from app.core.errors import InvalidMetadataFilterError
 
 logger = logging.getLogger(__name__)
 
 
 class MetadataFilterOperator:
-    """Supported metadata filter operators."""
-    EQUALS = "equals"  # Exact match (default)
-    CONTAINS = "contains"  # String contains substring
-    IN = "in"  # Value in list
-    NOT_EQUALS = "not_equals"  # Not equal to value
+    """
+    Supported MongoDB-style metadata filter operators.
+
+    Issue #24: All operators use MongoDB-style $ prefix in the API.
+    Internal operator names (without $) are used for matching logic.
+    """
+    # Core MongoDB operators
+    EQ = "eq"  # Exact match (default if no operator specified)
+    NE = "ne"  # Not equal to value
     GT = "gt"  # Greater than (numeric)
     GTE = "gte"  # Greater than or equal (numeric)
     LT = "lt"  # Less than (numeric)
     LTE = "lte"  # Less than or equal (numeric)
-    EXISTS = "exists"  # Field exists (boolean)
+    IN = "in"  # Value in array
+    NIN = "nin"  # Value not in array
+    EXISTS = "exists"  # Field exists/doesn't exist (boolean)
+
+    # Extension operators
+    CONTAINS = "contains"  # String contains substring
+
+    # Legacy aliases for backward compatibility
+    EQUALS = "eq"
+    NOT_EQUALS = "ne"
 
 
-# All supported operators
+# All supported operators (internal names without $)
 SUPPORTED_OPERATORS = {
-    MetadataFilterOperator.EQUALS,
-    MetadataFilterOperator.CONTAINS,
-    MetadataFilterOperator.IN,
-    MetadataFilterOperator.NOT_EQUALS,
+    MetadataFilterOperator.EQ,
+    MetadataFilterOperator.NE,
     MetadataFilterOperator.GT,
     MetadataFilterOperator.GTE,
     MetadataFilterOperator.LT,
     MetadataFilterOperator.LTE,
+    MetadataFilterOperator.IN,
+    MetadataFilterOperator.NIN,
     MetadataFilterOperator.EXISTS,
+    MetadataFilterOperator.CONTAINS,
+    # Legacy aliases
+    "equals",
+    "not_equals",
 }
 
 
@@ -82,17 +110,22 @@ class MetadataFilter:
         """
         Validate metadata filter format.
 
+        Issue #24: Validates MongoDB-style filter format.
+        Raises InvalidMetadataFilterError (422 INVALID_METADATA_FILTER) for invalid formats.
+
         Args:
             metadata_filter: Filter dictionary to validate
 
         Raises:
-            ValueError: If filter format is invalid
+            InvalidMetadataFilterError: If filter format is invalid (HTTP 422)
         """
         if metadata_filter is None:
             return
 
         if not isinstance(metadata_filter, dict):
-            raise ValueError("metadata_filter must be a dictionary")
+            raise InvalidMetadataFilterError(
+                "metadata_filter must be a dictionary"
+            )
 
         if not metadata_filter:
             # Empty dict is valid - no filtering
@@ -101,12 +134,14 @@ class MetadataFilter:
         # Validate each filter condition
         for field, condition in metadata_filter.items():
             if not isinstance(field, str):
-                raise ValueError(f"Filter field must be a string, got: {type(field)}")
+                raise InvalidMetadataFilterError(
+                    f"Filter field must be a string, got: {type(field).__name__}"
+                )
 
             if field.startswith("$"):
-                raise ValueError(
+                raise InvalidMetadataFilterError(
                     f"Top-level operator '{field}' not supported. "
-                    "Use field-level operators like: {{'field': {{'$eq': 'value'}}}}"
+                    "Use field-level operators like: {'field': {'$eq': 'value'}}"
                 )
 
             # Condition can be:
@@ -116,7 +151,7 @@ class MetadataFilter:
                 # Validate operator format
                 for operator, value in condition.items():
                     if not operator.startswith("$"):
-                        raise ValueError(
+                        raise InvalidMetadataFilterError(
                             f"Operator must start with '$', got: {operator}. "
                             f"Example: {{'$eq': 'value'}}"
                         )
@@ -124,17 +159,22 @@ class MetadataFilter:
                     # Remove $ prefix for validation
                     op_name = operator[1:]
                     if op_name not in SUPPORTED_OPERATORS:
-                        supported = ", ".join(f"${op}" for op in SUPPORTED_OPERATORS)
-                        raise ValueError(
+                        supported_ops = ["$eq", "$ne", "$gt", "$gte", "$lt", "$lte", "$in", "$nin", "$exists", "$contains"]
+                        raise InvalidMetadataFilterError(
                             f"Unsupported operator: {operator}. "
-                            f"Supported operators: {supported}"
+                            f"Supported operators: {', '.join(supported_ops)}"
                         )
 
                     # Validate operator-specific constraints
                     if op_name == MetadataFilterOperator.IN:
                         if not isinstance(value, list):
-                            raise ValueError(
-                                f"Operator '$in' requires a list value, got: {type(value)}"
+                            raise InvalidMetadataFilterError(
+                                f"Operator '$in' requires a list value, got: {type(value).__name__}"
+                            )
+                    elif op_name == MetadataFilterOperator.NIN:
+                        if not isinstance(value, list):
+                            raise InvalidMetadataFilterError(
+                                f"Operator '$nin' requires a list value, got: {type(value).__name__}"
                             )
                     elif op_name in {
                         MetadataFilterOperator.GT,
@@ -143,18 +183,18 @@ class MetadataFilter:
                         MetadataFilterOperator.LTE
                     }:
                         if not isinstance(value, (int, float)):
-                            raise ValueError(
-                                f"Operator '{operator}' requires a numeric value, got: {type(value)}"
+                            raise InvalidMetadataFilterError(
+                                f"Operator '{operator}' requires a numeric value, got: {type(value).__name__}"
                             )
                     elif op_name == MetadataFilterOperator.EXISTS:
                         if not isinstance(value, bool):
-                            raise ValueError(
-                                f"Operator '$exists' requires a boolean value, got: {type(value)}"
+                            raise InvalidMetadataFilterError(
+                                f"Operator '$exists' requires a boolean value, got: {type(value).__name__}"
                             )
                     elif op_name == MetadataFilterOperator.CONTAINS:
                         if not isinstance(value, str):
-                            raise ValueError(
-                                f"Operator '$contains' requires a string value, got: {type(value)}"
+                            raise InvalidMetadataFilterError(
+                                f"Operator '$contains' requires a string value, got: {type(value).__name__}"
                             )
 
     @staticmethod
@@ -196,6 +236,8 @@ class MetadataFilter:
         """
         Check if a single field matches its condition.
 
+        Issue #24: Supports all MongoDB-style operators.
+
         Args:
             vector_metadata: Metadata from the vector
             field: Field name to check
@@ -215,11 +257,13 @@ class MetadataFilter:
         for operator, expected_value in condition.items():
             op_name = operator[1:]  # Remove $ prefix
 
-            if op_name == MetadataFilterOperator.EQUALS:
+            # Handle $eq and legacy 'equals'
+            if op_name in (MetadataFilterOperator.EQ, "equals"):
                 if not MetadataFilter._compare_equals(field_value, expected_value):
                     return False
 
-            elif op_name == MetadataFilterOperator.NOT_EQUALS:
+            # Handle $ne and legacy 'not_equals'
+            elif op_name in (MetadataFilterOperator.NE, "not_equals"):
                 if MetadataFilter._compare_equals(field_value, expected_value):
                     return False
 
@@ -229,6 +273,11 @@ class MetadataFilter:
 
             elif op_name == MetadataFilterOperator.IN:
                 if not MetadataFilter._compare_in(field_value, expected_value):
+                    return False
+
+            # Handle $nin (not in array) - Issue #24
+            elif op_name == MetadataFilterOperator.NIN:
+                if not MetadataFilter._compare_nin(field_value, expected_value):
                     return False
 
             elif op_name == MetadataFilterOperator.GT:
@@ -273,6 +322,24 @@ class MetadataFilter:
         if not isinstance(expected_list, list):
             return False
         return field_value in expected_list
+
+    @staticmethod
+    def _compare_nin(field_value: Any, expected_list: List[Any]) -> bool:
+        """
+        Check if field value is NOT in expected list.
+
+        Issue #24: Implements $nin operator for MongoDB-style filtering.
+
+        Args:
+            field_value: The value from the metadata field
+            expected_list: List of values the field should NOT match
+
+        Returns:
+            True if field value is not in the list, False otherwise
+        """
+        if not isinstance(expected_list, list):
+            return False
+        return field_value not in expected_list
 
     @staticmethod
     def _compare_gt(field_value: Any, threshold: float) -> bool:

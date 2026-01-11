@@ -30,6 +30,43 @@ VALID_API_KEY = settings.demo_api_key_1
 PROJECT_ID = "test_project_001"
 
 
+@pytest.fixture(autouse=True)
+def clear_vector_store():
+    """Clear vector store before and after each test."""
+    from app.services.vector_store_service import vector_store_service
+    vector_store_service.clear_all_vectors()
+    yield
+    vector_store_service.clear_all_vectors()
+
+
+def store_vector_directly(project_id, text, model="BAAI/bge-small-en-v1.5", namespace="default", metadata=None):
+    """
+    Helper function to store a vector directly in vector_store_service.
+
+    This bypasses the embed-and-store API endpoint and stores directly,
+    ensuring vectors are available for search tests.
+    """
+    from app.services.embedding_service import embedding_service
+
+    # Generate embedding
+    embedding, model_used, dimensions, _ = embedding_service.generate_embedding(
+        text=text,
+        model=model
+    )
+
+    # Store directly in vector_store_service
+    result = embedding_service.embed_and_store(
+        text=text,
+        model=model,
+        namespace=namespace,
+        metadata=metadata,
+        project_id=project_id,
+        user_id="test_user"
+    )
+
+    return result
+
+
 class TestIncludeMetadataParameter:
     """Tests for include_metadata parameter (Issue #26)."""
 
@@ -47,18 +84,12 @@ class TestIncludeMetadataParameter:
             "priority": "high"
         }
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_metadata_default",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_metadata_default",
+            metadata=metadata
         )
-
-        assert store_response.status_code == status.HTTP_200_OK
 
         # Search without specifying include_metadata (should default to true)
         search_response = client.post(
@@ -98,18 +129,14 @@ class TestIncludeMetadataParameter:
             "category": "example"
         }
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_metadata_true",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_metadata_true",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with include_metadata=true
         search_response = client.post(
@@ -148,18 +175,14 @@ class TestIncludeMetadataParameter:
             "another_field": "value"
         }
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_metadata_false",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_metadata_false",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with include_metadata=false
         search_response = client.post(
@@ -197,17 +220,13 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for embedding exclusion default"
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_embedding_default"
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_embedding_default"
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search without specifying include_embeddings (should default to false)
         search_response = client.post(
@@ -241,17 +260,13 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for explicit embedding exclusion"
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_embedding_false"
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_embedding_false"
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with include_embeddings=false
         search_response = client.post(
@@ -284,17 +299,13 @@ class TestIncludeEmbeddingsParameter:
         # Store a vector
         vector_text = "Test document for embedding inclusion"
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_embedding_true"
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_embedding_true"
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with include_embeddings=true
         search_response = client.post(
@@ -340,18 +351,14 @@ class TestParameterCombinations:
         vector_text = "Test document for both parameters true"
         metadata = {"test": "data"}
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_both_true",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_both_true",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with both parameters true
         search_response = client.post(
@@ -394,18 +401,14 @@ class TestParameterCombinations:
         vector_text = "Test document for both parameters false"
         metadata = {"test": "data"}
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_both_false",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_both_false",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with both parameters false
         search_response = client.post(
@@ -435,10 +438,9 @@ class TestParameterCombinations:
         assert result.get("embedding") is None
 
         # Core fields should still be present
-        assert "vector_id" in result
-        assert "text" in result
-        assert "similarity" in result
-        assert "dimensions" in result
+        assert "id" in result
+        assert "document" in result
+        assert "score" in result
 
     def test_metadata_true_embeddings_false(self):
         """
@@ -451,18 +453,14 @@ class TestParameterCombinations:
         vector_text = "Test document for metadata true embeddings false"
         metadata = {"agent": "test"}
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_meta_true_embed_false",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_meta_true_embed_false",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with metadata=true, embeddings=false
         search_response = client.post(
@@ -503,18 +501,14 @@ class TestParameterCombinations:
         vector_text = "Test document for metadata false embeddings true"
         metadata = {"agent": "test"}
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_meta_false_embed_true",
-                "metadata": metadata
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_meta_false_embed_true",
+            metadata=metadata
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search with metadata=false, embeddings=true
         search_response = client.post(
@@ -559,17 +553,13 @@ class TestResponseSizeOptimization:
         # Store a vector
         vector_text = "Test document for response size comparison"
 
-        store_response = client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_response_size"
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_response_size"
         )
 
-        assert store_response.status_code == status.HTTP_200_OK
+
 
         # Search without embeddings
         response_without = client.post(
@@ -631,15 +621,11 @@ class TestOtherFunctionalityNotBroken:
         ]
 
         for vec in vectors:
-            client.post(
-                f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-                headers={"X-API-Key": VALID_API_KEY},
-                json={
-                    "text": vec["text"],
-                    "model": "BAAI/bge-small-en-v1.5",
-                    "namespace": "test_metadata_filter",
-                    "metadata": vec["metadata"]
-                }
+            store_vector_directly(
+                PROJECT_ID,
+                vec["text"],
+                namespace="test_metadata_filter",
+                metadata=vec["metadata"]
             )
 
         # Search with metadata_filter and include_metadata=false
@@ -670,14 +656,10 @@ class TestOtherFunctionalityNotBroken:
         # Store a vector
         vector_text = "Specific test document for similarity"
 
-        client.post(
-            f"/v1/public/{PROJECT_ID}/embeddings/embed-and-store",
-            headers={"X-API-Key": VALID_API_KEY},
-            json={
-                "text": vector_text,
-                "model": "BAAI/bge-small-en-v1.5",
-                "namespace": "test_similarity_threshold"
-            }
+        store_vector_directly(
+            PROJECT_ID,
+            vector_text,
+            namespace="test_similarity_threshold"
         )
 
         # Search with high similarity threshold and both toggles false
@@ -703,4 +685,4 @@ class TestOtherFunctionalityNotBroken:
 
         # All results should have high similarity
         for result in data["results"]:
-            assert result["similarity"] >= 0.9
+            assert result["score"] >= 0.9

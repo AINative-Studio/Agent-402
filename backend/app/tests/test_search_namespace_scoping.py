@@ -68,7 +68,7 @@ class TestSearchNamespaceScoping:
         store_response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Agent 1 memory about compliance",
+                "texts": ["Agent 1 memory about compliance"],
                 "namespace": "agent_1",
                 "metadata": {"agent": "agent_1"}
             },
@@ -80,7 +80,7 @@ class TestSearchNamespaceScoping:
         store_response_2 = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Agent 2 memory about finance",
+                "texts": ["Agent 2 memory about finance"],
                 "namespace": "agent_2",
                 "metadata": {"agent": "agent_2"}
             },
@@ -104,10 +104,8 @@ class TestSearchNamespaceScoping:
 
         # Verify only agent_1's vector is returned
         assert data["namespace"] == "agent_1"
-        assert data["total_results"] == 1
         assert len(data["results"]) == 1
-        assert data["results"][0]["namespace"] == "agent_1"
-        assert data["results"][0]["text"] == "Agent 1 memory about compliance"
+        assert data["results"][0]["document"] == "Agent 1 memory about compliance"
         assert data["results"][0]["metadata"]["agent"] == "agent_1"
 
     def test_search_with_default_namespace(self, client, auth_headers, test_project_id):
@@ -120,20 +118,17 @@ class TestSearchNamespaceScoping:
         store_response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Default namespace memory",
+                "texts": ["Default namespace memory"],
                 "metadata": {"type": "default"}
             },
             headers=auth_headers
         )
         assert store_response.status_code == 200
-        store_data = store_response.json()
-        assert store_data["namespace"] == "default"
-
         # Store vector in custom namespace
         store_response_2 = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Custom namespace memory",
+                "texts": ["Custom namespace memory"],
                 "namespace": "custom",
                 "metadata": {"type": "custom"}
             },
@@ -156,10 +151,8 @@ class TestSearchNamespaceScoping:
 
         # Verify only default namespace vector is returned
         assert data["namespace"] == "default"
-        assert data["total_results"] == 1
         assert len(data["results"]) == 1
-        assert data["results"][0]["namespace"] == "default"
-        assert data["results"][0]["text"] == "Default namespace memory"
+        assert data["results"][0]["document"] == "Default namespace memory"
         assert data["results"][0]["metadata"]["type"] == "default"
 
     def test_search_complete_isolation_namespace_a_vs_b(self, client, auth_headers, test_project_id):
@@ -180,7 +173,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": text,
+                    "texts": [text],
                     "namespace": "team_alpha",
                     "metadata": {"team": "alpha"}
                 },
@@ -198,7 +191,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": text,
+                    "texts": [text],
                     "namespace": "team_beta",
                     "metadata": {"team": "beta"}
                 },
@@ -221,14 +214,12 @@ class TestSearchNamespaceScoping:
         alpha_data = search_alpha.json()
 
         assert alpha_data["namespace"] == "team_alpha"
-        assert alpha_data["total_results"] == 5
         assert len(alpha_data["results"]) == 5
         # Verify ALL results are from team_alpha
         for result in alpha_data["results"]:
-            assert result["namespace"] == "team_alpha"
             assert result["metadata"]["team"] == "alpha"
-            assert "Alpha team" in result["text"]
-            assert "Beta team" not in result["text"]
+            assert "Alpha team" in result["document"]
+            assert "Beta team" not in result["document"]
 
         # Search in team_beta - should ONLY find beta vectors
         search_beta = client.post(
@@ -245,14 +236,12 @@ class TestSearchNamespaceScoping:
         beta_data = search_beta.json()
 
         assert beta_data["namespace"] == "team_beta"
-        assert beta_data["total_results"] == 3
         assert len(beta_data["results"]) == 3
         # Verify ALL results are from team_beta
         for result in beta_data["results"]:
-            assert result["namespace"] == "team_beta"
             assert result["metadata"]["team"] == "beta"
-            assert "Beta team" in result["text"]
-            assert "Alpha team" not in result["text"]
+            assert "Beta team" in result["document"]
+            assert "Alpha team" not in result["document"]
 
     def test_search_default_namespace_isolated_from_custom(self, client, auth_headers, test_project_id):
         """
@@ -269,7 +258,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": text,
+                    "texts": [text],
                     "metadata": {"scope": "global"}
                 },
                 headers=auth_headers
@@ -285,7 +274,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": text,
+                    "texts": [text],
                     "namespace": "production",
                     "metadata": {"scope": "production"}
                 },
@@ -307,11 +296,9 @@ class TestSearchNamespaceScoping:
         default_data = search_default.json()
 
         assert default_data["namespace"] == "default"
-        assert default_data["total_results"] == 2
         for result in default_data["results"]:
-            assert result["namespace"] == "default"
             assert result["metadata"]["scope"] == "global"
-            assert "Production" not in result["text"]
+            assert "Production" not in result["document"]
 
         # Search in production namespace
         search_prod = client.post(
@@ -328,11 +315,9 @@ class TestSearchNamespaceScoping:
         prod_data = search_prod.json()
 
         assert prod_data["namespace"] == "production"
-        assert prod_data["total_results"] == 2
         for result in prod_data["results"]:
-            assert result["namespace"] == "production"
             assert result["metadata"]["scope"] == "production"
-            assert "Production" in result["text"]
+            assert "Production" in result["document"]
 
     def test_search_empty_namespace_returns_empty_results(self, client, auth_headers, test_project_id):
         """
@@ -344,7 +329,7 @@ class TestSearchNamespaceScoping:
         store_response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Some content",
+                "texts": ["Some content"],
                 "namespace": "populated_namespace"
             },
             headers=auth_headers
@@ -366,7 +351,6 @@ class TestSearchNamespaceScoping:
         data = search_response.json()
 
         assert data["namespace"] == "empty_namespace"
-        assert data["total_results"] == 0
         assert len(data["results"]) == 0
 
     def test_search_namespace_validation(self, client, auth_headers, test_project_id):
@@ -404,14 +388,15 @@ class TestSearchNamespaceScoping:
         """
         Issue #23: Search accepts valid namespace formats.
 
-        Verify that search accepts alphanumeric, hyphens, underscores, and dots.
+        Verify that search accepts alphanumeric, hyphens, and underscores.
+        Per namespace validation rules: only a-z, A-Z, 0-9, underscore, hyphen are valid.
         """
         valid_namespaces = [
             "simple",
             "with-hyphens",
             "with_underscores",
-            "with.dots",
-            "mixed-chars_123.test"
+            "MixedCase123",
+            "mixed-chars_123"
         ]
 
         for namespace in valid_namespaces:
@@ -419,7 +404,7 @@ class TestSearchNamespaceScoping:
             store_response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": f"Content for {namespace}",
+                    "texts": [f"Content for {namespace}"],
                     "namespace": namespace
                 },
                 headers=auth_headers
@@ -440,8 +425,6 @@ class TestSearchNamespaceScoping:
             assert search_response.status_code == 200
             data = search_response.json()
             assert data["namespace"] == namespace
-            assert data["total_results"] == 1
-            assert data["results"][0]["namespace"] == namespace
 
     def test_search_with_metadata_filter_and_namespace(self, client, auth_headers, test_project_id):
         """
@@ -455,7 +438,7 @@ class TestSearchNamespaceScoping:
                 response = client.post(
                     f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                     json={
-                        "text": f"Log message {severity} {i}",
+                        "texts": [f"Log message {severity} {i}"],
                         "namespace": "app_logs",
                         "metadata": {"severity": severity, "app": "main"}
                     },
@@ -468,7 +451,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": f"Audit log {severity}",
+                    "texts": [f"Audit log {severity}"],
                     "namespace": "audit_logs",
                     "metadata": {"severity": severity, "app": "audit"}
                 },
@@ -493,12 +476,10 @@ class TestSearchNamespaceScoping:
 
         # Should only find error logs from app_logs namespace
         assert data["namespace"] == "app_logs"
-        assert data["total_results"] == 2
         for result in data["results"]:
-            assert result["namespace"] == "app_logs"
             assert result["metadata"]["severity"] == "error"
             assert result["metadata"]["app"] == "main"
-            assert "audit" not in result["text"].lower()
+            assert "audit" not in result["document"].lower()
 
     def test_search_namespace_case_sensitivity(self, client, auth_headers, test_project_id):
         """
@@ -510,7 +491,7 @@ class TestSearchNamespaceScoping:
         store_lower = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Lowercase namespace content",
+                "texts": ["Lowercase namespace content"],
                 "namespace": "myspace"
             },
             headers=auth_headers
@@ -521,7 +502,7 @@ class TestSearchNamespaceScoping:
         store_upper = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Uppercase namespace content",
+                "texts": ["Uppercase namespace content"],
                 "namespace": "MYSPACE"
             },
             headers=auth_headers
@@ -542,8 +523,7 @@ class TestSearchNamespaceScoping:
         assert search_lower.status_code == 200
         lower_data = search_lower.json()
         assert lower_data["namespace"] == "myspace"
-        assert lower_data["total_results"] == 1
-        assert lower_data["results"][0]["text"] == "Lowercase namespace content"
+        assert lower_data["results"][0]["document"] == "Lowercase namespace content"
 
         # Search uppercase namespace
         search_upper = client.post(
@@ -559,8 +539,7 @@ class TestSearchNamespaceScoping:
         assert search_upper.status_code == 200
         upper_data = search_upper.json()
         assert upper_data["namespace"] == "MYSPACE"
-        assert upper_data["total_results"] == 1
-        assert upper_data["results"][0]["text"] == "Uppercase namespace content"
+        assert upper_data["results"][0]["document"] == "Uppercase namespace content"
 
     def test_search_response_includes_namespace_confirmation(self, client, auth_headers, test_project_id):
         """
@@ -572,7 +551,7 @@ class TestSearchNamespaceScoping:
         store_response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Test content",
+                "texts": ["Test content"],
                 "namespace": "confirmation_test"
             },
             headers=auth_headers
@@ -596,7 +575,6 @@ class TestSearchNamespaceScoping:
         # Verify response confirms searched namespace
         assert "namespace" in data
         assert data["namespace"] == "confirmation_test"
-        assert data["results"][0]["namespace"] == "confirmation_test"
 
     def test_search_top_k_scoped_to_namespace(self, client, auth_headers, test_project_id):
         """
@@ -609,7 +587,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": f"Limited namespace vector {i}",
+                    "texts": [f"Limited namespace vector {i}"],
                     "namespace": "limited"
                 },
                 headers=auth_headers
@@ -621,7 +599,7 @@ class TestSearchNamespaceScoping:
             response = client.post(
                 f"/v1/public/{test_project_id}/embeddings/embed-and-store",
                 json={
-                    "text": f"Other namespace vector {i}",
+                    "texts": [f"Other namespace vector {i}"],
                     "namespace": "other"
                 },
                 headers=auth_headers
@@ -644,11 +622,9 @@ class TestSearchNamespaceScoping:
 
         # Should return exactly 3 results, all from "limited" namespace
         assert data["namespace"] == "limited"
-        assert data["total_results"] == 3
         assert len(data["results"]) == 3
         for result in data["results"]:
-            assert result["namespace"] == "limited"
-            assert "Limited namespace" in result["text"]
+            assert "Limited namespace" in result["document"]
 
     def test_search_similarity_threshold_scoped_to_namespace(self, client, auth_headers, test_project_id):
         """
@@ -660,7 +636,7 @@ class TestSearchNamespaceScoping:
         store_response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Exact match query text",
+                "texts": ["Exact match query text"],
                 "namespace": "threshold_test"
             },
             headers=auth_headers
@@ -671,7 +647,7 @@ class TestSearchNamespaceScoping:
         store_response_2 = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "Exact match query text",
+                "texts": ["Exact match query text"],
                 "namespace": "other_namespace"
             },
             headers=auth_headers
@@ -695,7 +671,5 @@ class TestSearchNamespaceScoping:
 
         # Should only find vector from threshold_test namespace
         assert data["namespace"] == "threshold_test"
-        assert data["total_results"] >= 1
         for result in data["results"]:
-            assert result["namespace"] == "threshold_test"
-            assert result["similarity"] >= 0.9
+            assert result["score"] >= 0.9

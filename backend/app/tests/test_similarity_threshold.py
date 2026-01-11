@@ -71,7 +71,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
     predictable similarity scores when queried.
     """
     # Store multiple vectors with different content
-    # Using single text embed-and-store endpoint
+    # Using the batch embed-and-store endpoint with texts array (Issue #16)
     test_texts = [
         "autonomous agent workflow",
         "agent system design",
@@ -80,20 +80,18 @@ def setup_test_vectors(client, auth_headers, test_project_id):
         "random text about nothing",
     ]
 
-    stored_responses = []
-    for text in test_texts:
-        response = client.post(
-            f"/v1/public/{test_project_id}/embeddings/embed-and-store",
-            json={
-                "text": text,
-                "namespace": "threshold_test"
-            },
-            headers=auth_headers
-        )
-        assert response.status_code == 200, f"Failed to store vector: {response.json()}"
-        stored_responses.append(response.json())
+    # Use the texts (array) field per the updated endpoint
+    response = client.post(
+        f"/v1/public/{test_project_id}/embeddings/embed-and-store",
+        json={
+            "texts": test_texts,
+            "namespace": "threshold_test"
+        },
+        headers=auth_headers
+    )
+    assert response.status_code == 200, f"Failed to store vectors: {response.json()}"
 
-    return stored_responses
+    return response.json()
 
 
 class TestSimilarityThresholdValidation:
@@ -119,7 +117,7 @@ class TestSimilarityThresholdValidation:
         data = response.json()
 
         # With default threshold (0.0), all vectors should be returned
-        assert data["total_results"] > 0
+        assert len(data["results"]) > 0
 
     def test_threshold_valid_range(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -229,7 +227,7 @@ class TestThresholdFiltering:
         assert response_low.status_code == 200
         data_low = response_low.json()
         results_low = data_low["results"]
-        total_low = data_low["total_results"]
+        total_low = len(results_low)
 
         # Then, get results with higher threshold
         response_high = client.post(
@@ -246,14 +244,14 @@ class TestThresholdFiltering:
         assert response_high.status_code == 200
         data_high = response_high.json()
         results_high = data_high["results"]
-        total_high = data_high["total_results"]
+        total_high = len(results_high)
 
         # Higher threshold should return fewer or equal results
         assert total_high <= total_low
 
         # All high-threshold results should have similarity >= 0.7
         for result in results_high:
-            assert result["similarity"] >= 0.7
+            assert result["score"] >= 0.7
 
     def test_threshold_zero_returns_all(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -276,7 +274,7 @@ class TestThresholdFiltering:
         data = response.json()
 
         # Should return all 5 stored vectors
-        assert data["total_results"] == 5
+        assert len(data["results"]) == 5
 
     def test_threshold_one_strict_matching(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -300,11 +298,11 @@ class TestThresholdFiltering:
 
         # With threshold 1.0, unlikely to have perfect matches
         # Results should be empty or very few
-        assert data["total_results"] >= 0
+        assert len(data["results"]) >= 0
 
         # Any results that do exist must have similarity >= 1.0 (essentially 1.0)
         for result in data["results"]:
-            assert result["similarity"] >= 0.99  # Allow for floating point precision
+            assert result["score"] >= 0.99  # Allow for floating point precision
 
     def test_threshold_ensures_minimum_quality(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -331,8 +329,8 @@ class TestThresholdFiltering:
 
             # Verify all results meet the threshold
             for result in data["results"]:
-                assert result["similarity"] >= threshold, \
-                    f"Result similarity {result['similarity']} below threshold {threshold}"
+                assert result["score"] >= threshold, \
+                    f"Result score {result['score']} below threshold {threshold}"
 
 
 class TestThresholdWithTopK:
@@ -361,11 +359,11 @@ class TestThresholdWithTopK:
 
         # All results should pass threshold
         for result in data["results"]:
-            assert result["similarity"] >= 0.6
+            assert result["score"] >= 0.6
 
         # Results should be sorted by similarity descending
-        similarities = [r["similarity"] for r in data["results"]]
-        assert similarities == sorted(similarities, reverse=True)
+        scores = [r["score"] for r in data["results"]]
+        assert scores == sorted(scores, reverse=True)
 
     def test_top_k_limits_threshold_results(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -387,7 +385,7 @@ class TestThresholdWithTopK:
 
         assert response_all.status_code == 200
         data_all = response_all.json()
-        total_all = data_all["total_results"]
+        total_all = len(data_all["results"])
 
         # Then, limit with top_k
         response_limited = client.post(
@@ -405,17 +403,17 @@ class TestThresholdWithTopK:
         data_limited = response_limited.json()
 
         # Should return at most top_k results
-        assert data_limited["total_results"] <= 2
+        assert len(data_limited["results"]) <= 2
 
         # If there were more than 2 results passing threshold,
         # we should get exactly 2 (the top 2)
         if total_all > 2:
-            assert data_limited["total_results"] == 2
+            assert len(data_limited["results"]) == 2
 
-            # Verify we got the top 2 by similarity
-            limited_similarities = [r["similarity"] for r in data_limited["results"]]
-            all_similarities = [r["similarity"] for r in data_all["results"]]
-            assert limited_similarities == all_similarities[:2]
+            # Verify we got the top 2 by score
+            limited_scores = [r["score"] for r in data_limited["results"]]
+            all_scores = [r["score"] for r in data_all["results"]]
+            assert limited_scores == all_scores[:2]
 
     def test_threshold_and_top_k_both_zero(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -438,11 +436,11 @@ class TestThresholdWithTopK:
         data = response.json()
 
         # Should return at most 3 results (limited by top_k)
-        assert data["total_results"] <= 3
+        assert len(data["results"]) <= 3
 
-        # Results should be sorted by similarity
-        similarities = [r["similarity"] for r in data["results"]]
-        assert similarities == sorted(similarities, reverse=True)
+        # Results should be sorted by score
+        scores = [r["score"] for r in data["results"]]
+        assert scores == sorted(scores, reverse=True)
 
 
 class TestNoMatchCases:
@@ -470,12 +468,11 @@ class TestNoMatchCases:
 
         # Should return successfully with empty or very few results
         assert "results" in data
-        assert "total_results" in data
-        assert data["total_results"] >= 0
+        assert len(data["results"]) >= 0
 
         # Any results that exist must meet threshold
         for result in data["results"]:
-            assert result["similarity"] >= 0.95
+            assert result["score"] >= 0.95
 
     def test_empty_namespace_with_threshold(self, client, auth_headers, test_project_id):
         """
@@ -498,7 +495,7 @@ class TestNoMatchCases:
         data = response.json()
 
         # Should return empty results
-        assert data["total_results"] == 0
+        assert len(data["results"]) == 0
         assert data["results"] == []
 
     def test_no_match_returns_proper_structure(self, client, auth_headers, test_project_id, setup_test_vectors):
@@ -524,14 +521,9 @@ class TestNoMatchCases:
         # Verify response structure is correct
         assert "results" in data
         assert isinstance(data["results"], list)
-        assert "query" in data
-        assert "namespace" in data
         assert "model" in data
-        assert "total_results" in data
+        assert "namespace" in data
         assert "processing_time_ms" in data
-
-        # total_results should match actual results length
-        assert data["total_results"] == len(data["results"])
 
 
 class TestThresholdEdgeCases:
@@ -558,18 +550,18 @@ class TestThresholdEdgeCases:
         assert response.status_code == 200
         data = response.json()
 
-        if data["total_results"] > 0:
-            # Use the lowest similarity score as threshold
-            similarities = [r["similarity"] for r in data["results"]]
-            lowest_similarity = min(similarities)
+        if len(data["results"]) > 0:
+            # Use the lowest score as threshold
+            scores = [r["score"] for r in data["results"]]
+            lowest_score = min(scores)
 
-            # Test with threshold exactly at lowest similarity
+            # Test with threshold exactly at lowest score
             response_exact = client.post(
                 f"/v1/public/{test_project_id}/embeddings/search",
                 json={
                     "query": "agent workflow",
                     "namespace": "threshold_test",
-                    "similarity_threshold": lowest_similarity,
+                    "similarity_threshold": lowest_score,
                     "top_k": 10
                 },
                 headers=auth_headers
@@ -579,11 +571,11 @@ class TestThresholdEdgeCases:
             data_exact = response_exact.json()
 
             # Should include the result with exact threshold match
-            assert data_exact["total_results"] > 0
+            assert len(data_exact["results"]) > 0
 
-            # All results should have similarity >= threshold
+            # All results should have score >= threshold
             for result in data_exact["results"]:
-                assert result["similarity"] >= lowest_similarity
+                assert result["score"] >= lowest_score
 
     def test_threshold_with_metadata_filter(self, client, auth_headers, test_project_id):
         """
@@ -591,11 +583,11 @@ class TestThresholdEdgeCases:
 
         Issue #25 Requirement: Threshold should work with other filters.
         """
-        # Store vectors with metadata
+        # Store vectors with metadata using the texts array field
         client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "agent workflow alpha",
+                "texts": ["agent workflow alpha"],
                 "namespace": "metadata_test",
                 "metadata": {"type": "workflow", "priority": "high"}
             },
@@ -605,7 +597,7 @@ class TestThresholdEdgeCases:
         client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "text": "agent workflow beta",
+                "texts": ["agent workflow beta"],
                 "namespace": "metadata_test",
                 "metadata": {"type": "workflow", "priority": "low"}
             },
@@ -631,7 +623,7 @@ class TestThresholdEdgeCases:
         # Should only return high priority results that meet threshold
         for result in data["results"]:
             assert result["metadata"]["priority"] == "high"
-            assert result["similarity"] >= 0.5
+            assert result["score"] >= 0.5
 
     def test_results_sorted_by_similarity_with_threshold(self, client, auth_headers, test_project_id, setup_test_vectors):
         """
@@ -653,16 +645,16 @@ class TestThresholdEdgeCases:
         assert response.status_code == 200
         data = response.json()
 
-        if data["total_results"] > 1:
-            # Extract similarities
-            similarities = [r["similarity"] for r in data["results"]]
+        if len(data["results"]) > 1:
+            # Extract scores
+            scores = [r["score"] for r in data["results"]]
 
             # Verify sorted in descending order
-            assert similarities == sorted(similarities, reverse=True)
+            assert scores == sorted(scores, reverse=True)
 
             # Verify all meet threshold
-            for similarity in similarities:
-                assert similarity >= 0.4
+            for score in scores:
+                assert score >= 0.4
 
 
 class TestThresholdDocumentation:
@@ -729,14 +721,14 @@ class TestThresholdDocumentation:
         data2 = response2.json()
 
         # Should return identical results
-        assert data1["total_results"] == data2["total_results"]
+        assert len(data1["results"]) == len(data2["results"])
 
         # Verify same vector IDs in same order
-        ids1 = [r["vector_id"] for r in data1["results"]]
-        ids2 = [r["vector_id"] for r in data2["results"]]
+        ids1 = [r["id"] for r in data1["results"]]
+        ids2 = [r["id"] for r in data2["results"]]
         assert ids1 == ids2
 
-        # Verify same similarities
-        sims1 = [r["similarity"] for r in data1["results"]]
-        sims2 = [r["similarity"] for r in data2["results"]]
-        assert sims1 == sims2
+        # Verify same scores
+        scores1 = [r["score"] for r in data1["results"]]
+        scores2 = [r["score"] for r in data2["results"]]
+        assert scores1 == scores2
