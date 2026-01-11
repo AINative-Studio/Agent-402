@@ -27,13 +27,16 @@ DX Contract Compliance:
 - Clear error handling for non-existent rows
 - Consistent response formats
 """
-import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple, Union
 from app.schemas.rows import SortOrder, RowData, RowFilter
 from app.services.table_service import table_service
 from app.schemas.tables import FieldType
 from app.core.errors import TableNotFoundError, SchemaValidationError
+from app.services.zerodb_client import get_zerodb_client
+
+logger = logging.getLogger(__name__)
 
 
 class RowService:
@@ -45,10 +48,16 @@ class RowService:
     """
 
     def __init__(self):
-        """Initialize the row service with in-memory storage for MVP."""
-        # In-memory store: project_id -> table_id -> row_id -> row_data
-        self._row_store: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
+        """Initialize the row service with lazy ZeroDB client."""
         self._table_service = table_service
+        self._client = None
+
+    @property
+    def client(self):
+        """Lazy initialization of ZeroDB client."""
+        if self._client is None:
+            self._client = get_zerodb_client()
+        return self._client
 
     # =========================================================================
     # Schema Validation Methods (Epic 7, Issue 2)
@@ -205,7 +214,7 @@ class RowService:
 
         return table
 
-    def insert_rows_validated(
+    async def insert_rows_validated(
         self,
         project_id: str,
         table_id: str,
@@ -275,7 +284,7 @@ class RowService:
                         final_data[field_name] = default_value
 
             # Insert the row using existing method
-            row_record = self.insert_row(
+            row_record = await self.insert_row(
                 project_id=project_id,
                 table_id=table_id,
                 row_data=final_data
@@ -284,7 +293,7 @@ class RowService:
 
         return created_rows
 
-    def insert_rows(
+    async def insert_rows(
         self,
         project_id: str,
         table_id: str,
@@ -309,47 +318,31 @@ class RowService:
             SchemaValidationError: If row data doesn't match table schema
         """
         # Use the validated insert method
-        return self.insert_rows_validated(
+        return await self.insert_rows_validated(
             project_id=project_id,
             table_id=table_id,
             row_data=rows
         )
 
     # =========================================================================
-    # Core Row Operations (Original methods)
+    # Core Row Operations (ZeroDB-backed methods)
     # =========================================================================
 
-    def _get_table_rows(
-        self,
-        project_id: str,
-        table_id: str
-    ) -> Dict[str, Dict[str, Any]]:
+    def _get_table_name(self, table_id: str) -> str:
         """
-        Get or initialize the row storage for a table.
+        Get the table name for ZeroDB API calls.
+
+        The ZeroDB API uses table_name (or table_id) in the URL path.
 
         Args:
-            project_id: Project identifier
             table_id: Table identifier
 
         Returns:
-            Dictionary of rows for the table
+            Table name/id for API calls
         """
-        if project_id not in self._row_store:
-            self._row_store[project_id] = {}
-        if table_id not in self._row_store[project_id]:
-            self._row_store[project_id][table_id] = {}
-        return self._row_store[project_id][table_id]
+        return table_id
 
-    def generate_row_id(self) -> str:
-        """
-        Generate a unique row ID.
-
-        Returns:
-            str: Unique row identifier with 'row_' prefix
-        """
-        return f"row_{uuid.uuid4().hex[:16]}"
-
-    def insert_row(
+    async def insert_row(
         self,
         project_id: str,
         table_id: str,
@@ -357,45 +350,46 @@ class RowService:
         row_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Insert a new row into a table.
+        Insert a new row into a table via ZeroDB API.
 
         Args:
             project_id: Project identifier
             table_id: Table identifier
             row_data: Row data as key-value pairs
-            row_id: Optional row ID (auto-generated if not provided)
+            row_id: Optional row ID (ignored, ZeroDB generates its own)
 
         Returns:
-            Complete row record with system fields
+            Complete row record with system fields from ZeroDB
         """
-        table_rows = self._get_table_rows(project_id, table_id)
+        table_name = self._get_table_name(table_id)
 
-        # Generate row ID if not provided
-        if not row_id:
-            row_id = self.generate_row_id()
+        try:
+            # ZeroDB insert_row returns the created row with row_id
+            result = await self.client.insert_row(table_name, row_data)
 
-        timestamp = datetime.utcnow().isoformat() + "Z"
+            # Normalize response to expected format
+            row_record = {
+                "row_id": result.get("row_id"),
+                "table_id": table_id,
+                "project_id": project_id,
+                "row_data": result.get("row_data", row_data),
+                "created_at": result.get("created_at", datetime.utcnow().isoformat() + "Z"),
+                "updated_at": result.get("updated_at")
+            }
+            return row_record
 
-        row_record = {
-            "row_id": row_id,
-            "table_id": table_id,
-            "project_id": project_id,
-            "row_data": row_data,
-            "created_at": timestamp,
-            "updated_at": None
-        }
+        except Exception as e:
+            logger.error(f"Failed to insert row into table {table_id}: {e}")
+            raise
 
-        table_rows[row_id] = row_record
-        return row_record
-
-    def get_row(
+    async def get_row(
         self,
         project_id: str,
         table_id: str,
         row_id: str
     ) -> Optional[Dict[str, Any]]:
         """
-        Get a single row by ID.
+        Get a single row by ID from ZeroDB.
 
         Args:
             project_id: Project identifier
@@ -405,17 +399,40 @@ class RowService:
         Returns:
             Row record or None if not found
         """
-        table_rows = self._get_table_rows(project_id, table_id)
-        return table_rows.get(row_id)
+        table_name = self._get_table_name(table_id)
 
-    def delete_row(
+        try:
+            result = await self.client.get_row(table_name, row_id)
+
+            # Normalize response to expected format
+            row_record = {
+                "row_id": result.get("row_id", row_id),
+                "table_id": table_id,
+                "project_id": project_id,
+                "row_data": result.get("row_data", {}),
+                "created_at": result.get("created_at"),
+                "updated_at": result.get("updated_at")
+            }
+            return row_record
+
+        except Exception as e:
+            # Check for 404 (not found) - return None
+            # httpx raises HTTPStatusError with response attribute
+            if hasattr(e, 'response'):
+                status_code = getattr(e.response, 'status_code', None)
+                if status_code == 404:
+                    return None
+            logger.error(f"Failed to get row {row_id} from table {table_id}: {e}")
+            raise
+
+    async def delete_row(
         self,
         project_id: str,
         table_id: str,
         row_id: str
     ) -> bool:
         """
-        Delete a row from a table.
+        Delete a row from a table via ZeroDB API.
 
         Args:
             project_id: Project identifier
@@ -425,21 +442,30 @@ class RowService:
         Returns:
             True if row was deleted, False if not found
         """
-        table_rows = self._get_table_rows(project_id, table_id)
+        table_name = self._get_table_name(table_id)
 
-        if row_id in table_rows:
-            del table_rows[row_id]
+        try:
+            await self.client.delete_row(table_name, row_id)
             return True
-        return False
 
-    def list_rows(
+        except Exception as e:
+            # Check for 404 (not found) - return False
+            # httpx raises HTTPStatusError with response attribute
+            if hasattr(e, 'response'):
+                status_code = getattr(e.response, 'status_code', None)
+                if status_code == 404:
+                    return False
+            logger.error(f"Failed to delete row {row_id} from table {table_id}: {e}")
+            raise
+
+    async def list_rows(
         self,
         project_id: str,
         table_id: str,
         filters: Optional[RowFilter] = None
     ) -> Tuple[List[Dict[str, Any]], int]:
         """
-        List rows with pagination, filtering, and sorting.
+        List rows with pagination, filtering, and sorting via ZeroDB API.
 
         Epic 7 Issue 4 Implementation:
         - Supports pagination via limit/offset
@@ -454,39 +480,68 @@ class RowService:
         Returns:
             Tuple of (paginated_rows, total_count)
         """
-        table_rows = self._get_table_rows(project_id, table_id)
-
-        # Get all rows as a list
-        all_rows = list(table_rows.values())
-
-        # Apply field filters if provided
-        if filters and filters.filters:
-            all_rows = self._apply_filters(all_rows, filters.filters)
-
-        # Get total count before pagination
-        total_count = len(all_rows)
-
-        # Apply sorting if specified
-        if filters and filters.sort_by:
-            all_rows = self._apply_sorting(
-                all_rows,
-                filters.sort_by,
-                filters.order
-            )
-        else:
-            # Default sort by created_at descending
-            all_rows = sorted(
-                all_rows,
-                key=lambda x: x.get("created_at", ""),
-                reverse=True
-            )
-
-        # Apply pagination
+        table_name = self._get_table_name(table_id)
         limit = filters.limit if filters else 100
         offset = filters.offset if filters else 0
-        paginated_rows = all_rows[offset:offset + limit]
 
-        return paginated_rows, total_count
+        try:
+            # Use query_rows if filters are provided, otherwise list_rows
+            if filters and filters.filters:
+                # Convert filters to MongoDB-style query
+                query_filter = {}
+                for field_name, value in filters.filters.items():
+                    query_filter[f"row_data.{field_name}"] = value
+
+                result = await self.client.query_rows(
+                    table_name,
+                    filter=query_filter,
+                    limit=limit,
+                    skip=offset
+                )
+            else:
+                result = await self.client.list_rows(
+                    table_name,
+                    skip=offset,
+                    limit=limit
+                )
+
+            # Extract rows from response
+            rows = result.get("rows", [])
+            total_count = result.get("total", len(rows))
+
+            # Normalize rows to expected format
+            normalized_rows = []
+            for row in rows:
+                normalized_row = {
+                    "row_id": row.get("row_id"),
+                    "table_id": table_id,
+                    "project_id": project_id,
+                    "row_data": row.get("row_data", {}),
+                    "created_at": row.get("created_at"),
+                    "updated_at": row.get("updated_at")
+                }
+                normalized_rows.append(normalized_row)
+
+            # Apply sorting locally if specified (ZeroDB may not support all sort options)
+            if filters and filters.sort_by:
+                normalized_rows = self._apply_sorting(
+                    normalized_rows,
+                    filters.sort_by,
+                    filters.order
+                )
+            else:
+                # Default sort by created_at descending
+                normalized_rows = sorted(
+                    normalized_rows,
+                    key=lambda x: x.get("created_at", "") or "",
+                    reverse=True
+                )
+
+            return normalized_rows, total_count
+
+        except Exception as e:
+            logger.error(f"Failed to list rows from table {table_id}: {e}")
+            raise
 
     def _apply_filters(
         self,
@@ -561,14 +616,14 @@ class RowService:
 
         return sorted(rows, key=get_sort_key, reverse=reverse)
 
-    def row_exists(
+    async def row_exists(
         self,
         project_id: str,
         table_id: str,
         row_id: str
     ) -> bool:
         """
-        Check if a row exists.
+        Check if a row exists via ZeroDB API.
 
         Args:
             project_id: Project identifier
@@ -578,16 +633,16 @@ class RowService:
         Returns:
             True if row exists, False otherwise
         """
-        table_rows = self._get_table_rows(project_id, table_id)
-        return row_id in table_rows
+        row = await self.get_row(project_id, table_id, row_id)
+        return row is not None
 
-    def get_table_stats(
+    async def get_table_stats(
         self,
         project_id: str,
         table_id: str
     ) -> Dict[str, Any]:
         """
-        Get statistics for a table.
+        Get statistics for a table via ZeroDB API.
 
         Args:
             project_id: Project identifier
@@ -596,13 +651,22 @@ class RowService:
         Returns:
             Dictionary with table statistics
         """
-        table_rows = self._get_table_rows(project_id, table_id)
+        table_name = self._get_table_name(table_id)
 
-        return {
-            "table_id": table_id,
-            "project_id": project_id,
-            "row_count": len(table_rows)
-        }
+        try:
+            # Get row count by listing with limit 0 (or use a small limit and get total)
+            result = await self.client.list_rows(table_name, skip=0, limit=1)
+            row_count = result.get("total", 0)
+
+            return {
+                "table_id": table_id,
+                "project_id": project_id,
+                "row_count": row_count
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get table stats for {table_id}: {e}")
+            raise
 
 
 # Singleton instance

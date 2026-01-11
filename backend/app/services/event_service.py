@@ -6,12 +6,17 @@ PRD Alignment:
 - §6: ZeroDB Integration with compliance_events and event logging
 - §10: Success Criteria - audit trail and replayability
 """
+import json
+import logging
 import os
 import uuid
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import httpx
 from app.core.config import settings
+from app.services.zerodb_client import get_zerodb_client
+
+logger = logging.getLogger(__name__)
 
 
 class EventService:
@@ -96,9 +101,29 @@ class EventService:
         if correlation_id:
             event_data["correlation_id"] = correlation_id
 
-        # Store event in ZeroDB
-        # For MVP, we'll use in-memory storage or ZeroDB MCP tools
-        # In production, this would make an actual ZeroDB API call
+        # Persist event to ZeroDB
+        try:
+            client = get_zerodb_client()
+            # Map to events table schema:
+            # id (uuid), event_id (text), project_id (text), event_type (text),
+            # source (text), correlation_id (text), data (jsonb),
+            # timestamp (timestamp), created_at (timestamp)
+            row_data = {
+                "id": str(uuid.uuid4()),
+                "event_id": event_id,
+                "project_id": self.project_id,
+                "event_type": event_type,
+                "source": source or "",
+                "correlation_id": correlation_id or "",
+                "data": json.dumps(data),  # jsonb column expects JSON string
+                "timestamp": timestamp,
+                "created_at": created_at
+            }
+            await client.insert_row("events", row_data)
+            logger.info(f"Event persisted to ZeroDB: {event_id}")
+        except Exception as e:
+            # Log error but don't fail - still return the event
+            logger.error(f"Failed to persist event to ZeroDB: {e}")
 
         # Return stable response format per Issue #40
         # Fields MUST be in this exact order: id, event_type, data, timestamp, created_at

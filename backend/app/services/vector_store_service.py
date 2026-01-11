@@ -1,15 +1,17 @@
 """
 Vector storage service with namespace isolation.
+Uses ZeroDB API for persistent vector storage and semantic search.
 
 Implements Issue #17: Namespace scoping for vector storage and retrieval.
 Implements Issue #24: Metadata filtering for search results.
 
 This service provides:
-- Namespace-scoped vector storage
+- Namespace-scoped vector storage via ZeroDB
 - Namespace-isolated vector retrieval
 - Default namespace handling
 - Cross-namespace isolation guarantees
 - Advanced metadata filtering (equals, contains, in, etc.)
+- Real semantic search via ZeroDB
 
 Per PRD Section 6: Agent-scoped memory for multi-agent systems.
 Per Epic 4 Story 2: Namespace scopes retrieval correctly.
@@ -33,6 +35,7 @@ from app.core.namespace_validator import (
     NamespaceValidationError,
     DEFAULT_NAMESPACE
 )
+from app.services.zerodb_client import get_zerodb_client
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +63,17 @@ class VectorStoreService:
     """
 
     def __init__(self):
-        """Initialize the vector store service."""
-        # In-memory storage for MVP: project_id -> namespace -> vector_id -> vector_data
+        """Initialize the vector store service with ZeroDB client."""
+        # In-memory storage as fallback: project_id -> namespace -> vector_id -> vector_data
         self._vectors: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
-        logger.info("VectorStoreService initialized")
+        self._zerodb_available = False
+        try:
+            self._zerodb_client = get_zerodb_client()
+            self._zerodb_available = True
+            logger.info("VectorStoreService initialized with ZeroDB client")
+        except ValueError as e:
+            logger.warning(f"ZeroDB client not available, using in-memory storage: {e}")
+            self._zerodb_client = None
 
     def _validate_namespace(self, namespace: Optional[str] = None) -> str:
         """
@@ -101,7 +111,7 @@ class VectorStoreService:
         if namespace not in self._vectors[project_id]:
             self._vectors[project_id][namespace] = {}
 
-    def store_vector(
+    async def store_vector(
         self,
         project_id: str,
         user_id: str,
@@ -115,7 +125,7 @@ class VectorStoreService:
         upsert: bool = False
     ) -> Dict[str, Any]:
         """
-        Store a vector in the specified namespace.
+        Store a vector in the specified namespace via ZeroDB.
 
         Issue #17: Namespace isolation is enforced here.
         - Each vector is stored in a specific namespace
@@ -144,12 +154,61 @@ class VectorStoreService:
         # Validate and normalize namespace using centralized validator
         validated_namespace = self._validate_namespace(namespace)
 
-        # Ensure storage structure exists
-        self._ensure_project_namespace(project_id, validated_namespace)
-
         # Generate or use provided vector_id
         if vector_id is None:
             vector_id = str(uuid.uuid4())
+
+        # Try ZeroDB first if available
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                # Prepare metadata with context
+                vector_metadata = metadata.copy() if metadata else {}
+                vector_metadata["user_id"] = user_id
+                vector_metadata["project_id"] = project_id
+                vector_metadata["model"] = model
+                vector_metadata["dimensions"] = dimensions
+
+                # Store vector in ZeroDB
+                result = await self._zerodb_client.upsert_vector(
+                    vector_embedding=embedding,
+                    document=text,
+                    namespace=validated_namespace,
+                    vector_id=vector_id,
+                    vector_metadata=vector_metadata
+                )
+
+                created = result.get("created", True)
+                updated_at = datetime.utcnow().isoformat()
+
+                logger.info(
+                    f"Stored vector in ZeroDB namespace '{validated_namespace}'",
+                    extra={
+                        "project_id": project_id,
+                        "namespace": validated_namespace,
+                        "vector_id": vector_id,
+                        "dimensions": dimensions
+                    }
+                )
+
+                return {
+                    "vector_id": vector_id,
+                    "namespace": validated_namespace,
+                    "stored": True,
+                    "created": created,
+                    "upsert": upsert,
+                    "dimensions": dimensions,
+                    "model": model,
+                    "created_at": updated_at if created else result.get("created_at", updated_at),
+                    "updated_at": updated_at
+                }
+
+            except Exception as e:
+                logger.warning(f"ZeroDB storage failed, falling back to local: {e}")
+                # Fall through to local storage
+
+        # Fallback: Local in-memory storage
+        # Ensure storage structure exists
+        self._ensure_project_namespace(project_id, validated_namespace)
 
         # Check for existing vector
         namespace_vectors = self._vectors[project_id][validated_namespace]
@@ -184,7 +243,7 @@ class VectorStoreService:
         namespace_vectors[vector_id] = vector_data
 
         logger.info(
-            f"Stored vector in namespace '{validated_namespace}'",
+            f"Stored vector in local namespace '{validated_namespace}'",
             extra={
                 "project_id": project_id,
                 "namespace": validated_namespace,
@@ -207,7 +266,7 @@ class VectorStoreService:
             "updated_at": vector_data["updated_at"]
         }
 
-    def search_vectors(
+    async def search_vectors(
         self,
         project_id: str,
         query_embedding: List[float],
@@ -220,7 +279,7 @@ class VectorStoreService:
         include_embeddings: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Search for similar vectors in the specified namespace.
+        Search for similar vectors in the specified namespace via ZeroDB.
 
         Issue #23 (Namespace Scoping): Namespace scoping is strictly enforced.
         - Only vectors from the specified namespace are searched
@@ -272,6 +331,56 @@ class VectorStoreService:
         # Validate and normalize namespace using centralized validator (Issue #17/23)
         validated_namespace = self._validate_namespace(namespace)
 
+        # Try ZeroDB first if available
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                # Use ZeroDB vector search
+                result = await self._zerodb_client.search_vectors(
+                    query_vector=query_embedding,
+                    limit=top_k,
+                    namespace=validated_namespace,
+                    threshold=similarity_threshold,
+                    metadata_filter=metadata_filter
+                )
+
+                vectors = result.get("results", []) or result.get("vectors", [])
+
+                # Transform ZeroDB results to our format
+                results = []
+                for vec in vectors:
+                    item = {
+                        "vector_id": vec.get("vector_id", vec.get("id", "")),
+                        "namespace": validated_namespace,
+                        "text": vec.get("document", vec.get("text", "")),
+                        "similarity": vec.get("similarity", vec.get("score", 0.0)),
+                        "model": vec.get("metadata", {}).get("model", ""),
+                        "dimensions": vec.get("metadata", {}).get("dimensions", len(query_embedding)),
+                        "created_at": vec.get("created_at", ""),
+                    }
+
+                    if include_metadata:
+                        item["metadata"] = vec.get("metadata", {})
+                    if include_embeddings:
+                        item["embedding"] = vec.get("embedding", vec.get("vector", []))
+
+                    results.append(item)
+
+                logger.info(
+                    f"Found {len(results)} vectors via ZeroDB in namespace '{validated_namespace}'",
+                    extra={
+                        "project_id": project_id,
+                        "namespace": validated_namespace,
+                        "top_k": top_k
+                    }
+                )
+
+                return results
+
+            except Exception as e:
+                logger.warning(f"ZeroDB search failed, falling back to local: {e}")
+                # Fall through to local search
+
+        # Fallback: Local in-memory search
         # Check if project and namespace exist
         if project_id not in self._vectors:
             logger.info(f"No vectors found for project {project_id}")
@@ -397,7 +506,7 @@ class VectorStoreService:
         # Normalize to 0.0 to 1.0 range
         return max(0.0, min(1.0, (similarity + 1.0) / 2.0))
 
-    def get_namespace_stats(
+    async def get_namespace_stats(
         self,
         project_id: str,
         namespace: Optional[str] = None
@@ -417,6 +526,20 @@ class VectorStoreService:
         """
         validated_namespace = self._validate_namespace(namespace)
 
+        # Try ZeroDB first if available
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                result = await self._zerodb_client.get_vector_stats()
+                return {
+                    "namespace": validated_namespace,
+                    "vector_count": result.get("total_vectors", 0),
+                    "exists": True,
+                    "storage_used_bytes": result.get("storage_used_bytes", 0)
+                }
+            except Exception as e:
+                logger.warning(f"ZeroDB stats failed, using local: {e}")
+
+        # Fallback: Local in-memory stats
         if project_id not in self._vectors:
             return {
                 "namespace": validated_namespace,
@@ -439,7 +562,7 @@ class VectorStoreService:
             "exists": True
         }
 
-    def list_namespaces(self, project_id: str) -> List[str]:
+    async def list_namespaces(self, project_id: str) -> List[str]:
         """
         List all namespaces in a project.
 
@@ -449,12 +572,14 @@ class VectorStoreService:
         Returns:
             List of namespace names
         """
+        # ZeroDB doesn't have a direct list_namespaces API
+        # Fall back to local storage
         if project_id not in self._vectors:
             return []
 
         return list(self._vectors[project_id].keys())
 
-    def get_vector(
+    async def get_vector(
         self,
         project_id: str,
         vector_id: str,
@@ -473,6 +598,8 @@ class VectorStoreService:
         """
         validated_namespace = self._validate_namespace(namespace)
 
+        # ZeroDB doesn't have a direct get_vector by ID API
+        # Fall back to local storage
         if project_id not in self._vectors:
             return None
 
@@ -481,14 +608,14 @@ class VectorStoreService:
 
         return self._vectors[project_id][validated_namespace].get(vector_id)
 
-    def clear_all_vectors(self):
+    async def clear_all_vectors(self):
         """
         Clear all vectors from storage.
 
         This method is primarily for testing purposes.
         """
         self._vectors.clear()
-        logger.warning("All vectors cleared from storage")
+        logger.warning("All vectors cleared from local storage")
 
 
 # Singleton instance

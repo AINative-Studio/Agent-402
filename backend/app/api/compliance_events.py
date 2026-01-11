@@ -113,7 +113,7 @@ async def create_compliance_event(
     Returns:
         ComplianceEventResponse with created event data
     """
-    event = compliance_service.create_event(
+    event = await compliance_service.create_event(
         project_id=project_id,
         event_data=request
     )
@@ -205,7 +205,7 @@ async def list_compliance_events(
     )
 
     # Get filtered events
-    events, total = compliance_service.list_events(
+    events, total = await compliance_service.list_events(
         project_id=project_id,
         filters=filters
     )
@@ -266,7 +266,7 @@ async def get_compliance_event(
     Raises:
         APIError: If event not found (404)
     """
-    event = compliance_service.get_event(
+    event = await compliance_service.get_event(
         project_id=project_id,
         event_id=event_id
     )

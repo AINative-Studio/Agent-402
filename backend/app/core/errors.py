@@ -719,6 +719,33 @@ class VectorNotFoundError(APIError):
         self.namespace = namespace
 
 
+class ZeroDBError(APIError):
+    """
+    Raised when ZeroDB API calls fail.
+
+    This error wraps connection errors, timeouts, and unexpected API responses
+    from the ZeroDB service.
+
+    Returns:
+        - HTTP 502 (Bad Gateway)
+        - error_code: ZERODB_ERROR
+        - detail: Message about the ZeroDB failure
+    """
+
+    def __init__(self, detail: str = "ZeroDB service error"):
+        """
+        Initialize ZeroDBError.
+
+        Args:
+            detail: Human-readable error message about the ZeroDB failure
+        """
+        super().__init__(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            error_code="ZERODB_ERROR",
+            detail=detail or "ZeroDB service error"
+        )
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

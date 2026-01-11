@@ -107,7 +107,7 @@ async def create_agent(
 
     # Create agent - DuplicateAgentDIDError is an APIError and will be
     # handled by the exception handler with proper error_code
-    agent = agent_service.create_agent(
+    agent = await agent_service.create_agent(
         project_id=project_id,
         did=request.did,
         role=request.role,
@@ -182,7 +182,7 @@ async def list_agents(
     validate_project_access(project_id, current_user)
 
     # Get agents for project
-    agents = agent_service.list_project_agents(project_id)
+    agents = await agent_service.list_project_agents(project_id)
 
     # Convert to response models
     agent_responses: List[AgentResponse] = [
@@ -260,7 +260,7 @@ async def get_agent(
 
     # Get agent - AgentNotFoundError is an APIError and will be
     # handled by the exception handler with proper error_code
-    agent = agent_service.get_agent(agent_id, project_id)
+    agent = await agent_service.get_agent(agent_id, project_id)
 
     return AgentResponse(
         id=agent.id,

@@ -7,15 +7,16 @@ Per PRD Section 6 (ZeroDB Integration):
 - Support filtering and querying of events
 - Provide deterministic event IDs
 
-For MVP: Uses in-memory storage simulation
-For Production: Will use actual ZeroDB table storage
+Uses ZeroDB for persistence via the compliance_events table.
 """
 import uuid
-import time
+import json
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from app.core.config import settings
 from app.core.errors import APIError
+from app.services.zerodb_client import get_zerodb_client
 from app.schemas.compliance_events import (
     ComplianceEventType,
     ComplianceOutcome,
@@ -24,22 +25,44 @@ from app.schemas.compliance_events import (
     ComplianceEventFilter
 )
 
+logger = logging.getLogger(__name__)
+
+# Table name for compliance events
+COMPLIANCE_EVENTS_TABLE = "compliance_events"
+
 
 class ComplianceService:
     """
     Service for managing compliance events.
 
     Provides CRUD operations for compliance events with filtering
-    and pagination support. Integrates with ZeroDB for persistence.
-
-    For MVP: Uses in-memory storage
-    For Production: Uses ZeroDB table storage via MCP
+    and pagination support. Uses ZeroDB for persistence.
     """
 
     def __init__(self):
         """Initialize the compliance service."""
-        # In-memory store for MVP (project_id -> event_id -> event_data)
-        self._event_store: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        # ZeroDB client will be retrieved lazily
+        self._client = None
+
+    @property
+    def client(self):
+        """Lazy initialization of ZeroDB client."""
+        if self._client is None:
+            self._client = get_zerodb_client()
+        return self._client
+
+    def _get_client(self):
+        """Get the ZeroDB client singleton."""
+        if self._client is None:
+            self._client = None
+
+    @property
+    def client(self):
+        """Lazy initialization of ZeroDB client."""
+        if self._client is None:
+            self._client = get_zerodb_client()
+        return self._client
+        return self._client
 
     def generate_event_id(self) -> str:
         """
@@ -54,7 +77,7 @@ class ComplianceService:
         """
         return f"evt_{uuid.uuid4().hex[:16]}"
 
-    def create_event(
+    async def create_event(
         self,
         project_id: str,
         event_data: ComplianceEventCreate
@@ -80,26 +103,34 @@ class ComplianceService:
         # Generate timestamp
         timestamp = datetime.utcnow().isoformat() + "Z"
 
-        # Prepare event record
-        event_record = {
+        # Prepare row data for ZeroDB
+        # Note: Maps to compliance_events table schema
+        row_data = {
             "event_id": event_id,
             "project_id": project_id,
             "agent_id": event_data.agent_id,
             "event_type": event_data.event_type.value,
-            "outcome": event_data.outcome.value,
-            "risk_score": event_data.risk_score,
-            "details": event_data.details or {},
-            "run_id": event_data.run_id,
+            "action": event_data.outcome.value,  # Maps outcome to action column
+            "risk_score": int(event_data.risk_score * 100),  # Scale to integer 0-100
+            "risk_level": self._calculate_risk_level(event_data.risk_score),
+            "passed": event_data.outcome == ComplianceOutcome.PASS,
+            "details": json.dumps(event_data.details or {}),
+            "run_id": event_data.run_id or "",
             "timestamp": timestamp,
-            "created_at": time.time()
+            "created_at": timestamp
         }
 
-        # Initialize project store if needed
-        if project_id not in self._event_store:
-            self._event_store[project_id] = {}
-
-        # Store event
-        self._event_store[project_id][event_id] = event_record
+        try:
+            client = self._get_client()
+            result = await client.insert_row(COMPLIANCE_EVENTS_TABLE, row_data)
+            logger.info(f"Created compliance event {event_id} for project {project_id}")
+        except Exception as e:
+            logger.error(f"Failed to create compliance event: {e}")
+            raise APIError(
+                message=f"Failed to create compliance event: {str(e)}",
+                status_code=500,
+                error_code="COMPLIANCE_EVENT_CREATE_FAILED"
+            )
 
         return ComplianceEventResponse(
             event_id=event_id,
@@ -113,7 +144,18 @@ class ComplianceService:
             timestamp=timestamp
         )
 
-    def get_event(
+    def _calculate_risk_level(self, risk_score: float) -> str:
+        """Calculate risk level from risk score."""
+        if risk_score <= 0.25:
+            return "low"
+        elif risk_score <= 0.5:
+            return "medium"
+        elif risk_score <= 0.75:
+            return "high"
+        else:
+            return "critical"
+
+    async def get_event(
         self,
         project_id: str,
         event_id: str
@@ -128,26 +170,67 @@ class ComplianceService:
         Returns:
             ComplianceEventResponse or None if not found
         """
-        if project_id not in self._event_store:
+        try:
+            client = self._get_client()
+            # Query by event_id and project_id
+            filter_query = {
+                "event_id": {"$eq": event_id},
+                "project_id": {"$eq": project_id}
+            }
+            result = await client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
+
+            rows = result.get("rows", [])
+            if not rows:
+                return None
+
+            event_record = rows[0]
+            return self._row_to_response(event_record)
+        except Exception as e:
+            logger.error(f"Failed to get compliance event {event_id}: {e}")
             return None
 
-        event_record = self._event_store[project_id].get(event_id)
-        if not event_record:
-            return None
+    def _row_to_response(self, row: Dict[str, Any]) -> ComplianceEventResponse:
+        """Convert a database row to a ComplianceEventResponse."""
+        # Parse details if it's a string
+        details = row.get("details", {})
+        if isinstance(details, str):
+            try:
+                details = json.loads(details)
+            except json.JSONDecodeError:
+                details = {}
+
+        # Convert risk_score back from integer (0-100) to float (0.0-1.0)
+        risk_score = row.get("risk_score", 0)
+        if isinstance(risk_score, int) and risk_score > 1:
+            risk_score = risk_score / 100.0
+
+        # Map action back to outcome
+        action = row.get("action", "PASS")
+        try:
+            outcome = ComplianceOutcome(action)
+        except ValueError:
+            outcome = ComplianceOutcome.PASS
+
+        # Map event_type
+        event_type_str = row.get("event_type", "AUDIT_LOG")
+        try:
+            event_type = ComplianceEventType(event_type_str)
+        except ValueError:
+            event_type = ComplianceEventType.AUDIT_LOG
 
         return ComplianceEventResponse(
-            event_id=event_record["event_id"],
-            project_id=event_record["project_id"],
-            agent_id=event_record["agent_id"],
-            event_type=ComplianceEventType(event_record["event_type"]),
-            outcome=ComplianceOutcome(event_record["outcome"]),
-            risk_score=event_record["risk_score"],
-            details=event_record["details"],
-            run_id=event_record["run_id"],
-            timestamp=event_record["timestamp"]
+            event_id=row.get("event_id", ""),
+            project_id=row.get("project_id", ""),
+            agent_id=row.get("agent_id", ""),
+            event_type=event_type,
+            outcome=outcome,
+            risk_score=risk_score,
+            details=details,
+            run_id=row.get("run_id") or None,
+            timestamp=row.get("timestamp", "")
         )
 
-    def list_events(
+    async def list_events(
         self,
         project_id: str,
         filters: ComplianceEventFilter
@@ -162,100 +245,102 @@ class ComplianceService:
         Returns:
             Tuple of (list of events, total count)
         """
-        if project_id not in self._event_store:
+        try:
+            client = self._get_client()
+
+            # Build MongoDB-style filter
+            filter_query = self._build_filter_query(project_id, filters)
+
+            # Query with pagination
+            result = await client.query_rows(
+                COMPLIANCE_EVENTS_TABLE,
+                filter_query,
+                limit=filters.limit,
+                skip=filters.offset
+            )
+
+            rows = result.get("rows", [])
+            total = result.get("total", len(rows))
+
+            # Convert to response objects
+            response_events = [self._row_to_response(row) for row in rows]
+
+            return response_events, total
+        except Exception as e:
+            logger.error(f"Failed to list compliance events: {e}")
             return [], 0
 
-        # Get all events for project
-        all_events = list(self._event_store[project_id].values())
-
-        # Apply filters
-        filtered_events = self._apply_filters(all_events, filters)
-
-        # Sort by timestamp descending (most recent first)
-        filtered_events.sort(key=lambda x: x["created_at"], reverse=True)
-
-        # Get total count before pagination
-        total = len(filtered_events)
-
-        # Apply pagination
-        paginated_events = filtered_events[filters.offset:filters.offset + filters.limit]
-
-        # Convert to response objects
-        response_events = [
-            ComplianceEventResponse(
-                event_id=event["event_id"],
-                project_id=event["project_id"],
-                agent_id=event["agent_id"],
-                event_type=ComplianceEventType(event["event_type"]),
-                outcome=ComplianceOutcome(event["outcome"]),
-                risk_score=event["risk_score"],
-                details=event["details"],
-                run_id=event["run_id"],
-                timestamp=event["timestamp"]
-            )
-            for event in paginated_events
-        ]
-
-        return response_events, total
-
-    def _apply_filters(
+    def _build_filter_query(
         self,
-        events: List[Dict[str, Any]],
+        project_id: str,
         filters: ComplianceEventFilter
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
-        Apply filters to event list.
+        Build MongoDB-style filter query from ComplianceEventFilter.
 
         Args:
-            events: List of event records
+            project_id: Project identifier
             filters: Filter parameters
 
         Returns:
-            Filtered list of events
+            MongoDB-style filter dictionary
         """
-        result = events
+        query: Dict[str, Any] = {
+            "project_id": {"$eq": project_id}
+        }
 
         # Filter by agent_id
         if filters.agent_id:
-            result = [e for e in result if e["agent_id"] == filters.agent_id]
+            query["agent_id"] = {"$eq": filters.agent_id}
 
         # Filter by event_type
         if filters.event_type:
-            result = [e for e in result if e["event_type"] == filters.event_type.value]
+            query["event_type"] = {"$eq": filters.event_type.value}
 
-        # Filter by outcome
+        # Filter by outcome (maps to action column)
         if filters.outcome:
-            result = [e for e in result if e["outcome"] == filters.outcome.value]
+            query["action"] = {"$eq": filters.outcome.value}
 
         # Filter by run_id
         if filters.run_id:
-            result = [e for e in result if e["run_id"] == filters.run_id]
+            query["run_id"] = {"$eq": filters.run_id}
 
-        # Filter by min_risk_score
+        # Filter by min_risk_score (convert to integer 0-100)
         if filters.min_risk_score is not None:
-            result = [e for e in result if e["risk_score"] >= filters.min_risk_score]
+            min_score_int = int(filters.min_risk_score * 100)
+            query["risk_score"] = query.get("risk_score", {})
+            query["risk_score"]["$gte"] = min_score_int
 
-        # Filter by max_risk_score
+        # Filter by max_risk_score (convert to integer 0-100)
         if filters.max_risk_score is not None:
-            result = [e for e in result if e["risk_score"] <= filters.max_risk_score]
+            max_score_int = int(filters.max_risk_score * 100)
+            if "risk_score" not in query:
+                query["risk_score"] = {}
+            query["risk_score"]["$lte"] = max_score_int
 
         # Filter by start_time
         if filters.start_time:
-            result = [e for e in result if e["timestamp"] >= filters.start_time]
+            query["timestamp"] = query.get("timestamp", {})
+            query["timestamp"]["$gte"] = filters.start_time
 
         # Filter by end_time
         if filters.end_time:
-            result = [e for e in result if e["timestamp"] <= filters.end_time]
+            if "timestamp" not in query:
+                query["timestamp"] = {}
+            query["timestamp"]["$lte"] = filters.end_time
 
-        return result
+        return query
 
-    def delete_event(
+    async def delete_event(
         self,
         project_id: str,
         event_id: str
     ) -> bool:
         """
         Delete a compliance event.
+
+        Note: ZeroDB client doesn't have a direct delete_row_by_filter method.
+        We query first to get the row_id, then delete by row_id.
 
         Args:
             project_id: Project identifier
@@ -264,16 +349,35 @@ class ComplianceService:
         Returns:
             True if deleted, False if not found
         """
-        if project_id not in self._event_store:
+        try:
+            client = self._get_client()
+
+            # First, find the row to get its row_id
+            filter_query = {
+                "event_id": {"$eq": event_id},
+                "project_id": {"$eq": project_id}
+            }
+            result = await client.query_rows(COMPLIANCE_EVENTS_TABLE, filter_query, limit=1)
+
+            rows = result.get("rows", [])
+            if not rows:
+                return False
+
+            # Get the row_id (assuming the API returns it)
+            row_id = rows[0].get("id") or rows[0].get("row_id")
+            if not row_id:
+                logger.warning(f"No row_id found for event {event_id}")
+                return False
+
+            # Delete the row
+            await client.delete_row(COMPLIANCE_EVENTS_TABLE, str(row_id))
+            logger.info(f"Deleted compliance event {event_id} for project {project_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete compliance event {event_id}: {e}")
             return False
 
-        if event_id in self._event_store[project_id]:
-            del self._event_store[project_id][event_id]
-            return True
-
-        return False
-
-    def get_project_stats(
+    async def get_project_stats(
         self,
         project_id: str
     ) -> Dict[str, Any]:
@@ -286,7 +390,60 @@ class ComplianceService:
         Returns:
             Dictionary with event statistics
         """
-        if project_id not in self._event_store:
+        try:
+            client = self._get_client()
+
+            # Get all events for the project (with a reasonable limit)
+            filter_query = {"project_id": {"$eq": project_id}}
+            result = await client.query_rows(
+                COMPLIANCE_EVENTS_TABLE,
+                filter_query,
+                limit=10000  # Reasonable limit for stats
+            )
+
+            rows = result.get("rows", [])
+
+            if not rows:
+                return {
+                    "project_id": project_id,
+                    "total_events": 0,
+                    "events_by_type": {},
+                    "events_by_outcome": {},
+                    "average_risk_score": 0.0
+                }
+
+            # Count by type
+            events_by_type: Dict[str, int] = {}
+            for row in rows:
+                event_type = row.get("event_type", "UNKNOWN")
+                events_by_type[event_type] = events_by_type.get(event_type, 0) + 1
+
+            # Count by outcome (action column)
+            events_by_outcome: Dict[str, int] = {}
+            for row in rows:
+                outcome = row.get("action", "UNKNOWN")
+                events_by_outcome[outcome] = events_by_outcome.get(outcome, 0) + 1
+
+            # Calculate average risk score
+            risk_scores = []
+            for row in rows:
+                score = row.get("risk_score", 0)
+                # Convert from integer (0-100) to float (0.0-1.0) if needed
+                if isinstance(score, int) and score > 1:
+                    score = score / 100.0
+                risk_scores.append(score)
+
+            avg_risk = sum(risk_scores) / len(risk_scores) if risk_scores else 0.0
+
+            return {
+                "project_id": project_id,
+                "total_events": len(rows),
+                "events_by_type": events_by_type,
+                "events_by_outcome": events_by_outcome,
+                "average_risk_score": round(avg_risk, 4)
+            }
+        except Exception as e:
+            logger.error(f"Failed to get project stats for {project_id}: {e}")
             return {
                 "project_id": project_id,
                 "total_events": 0,
@@ -294,34 +451,6 @@ class ComplianceService:
                 "events_by_outcome": {},
                 "average_risk_score": 0.0
             }
-
-        events = list(self._event_store[project_id].values())
-
-        # Count by type
-        events_by_type = {}
-        for event in events:
-            event_type = event["event_type"]
-            events_by_type[event_type] = events_by_type.get(event_type, 0) + 1
-
-        # Count by outcome
-        events_by_outcome = {}
-        for event in events:
-            outcome = event["outcome"]
-            events_by_outcome[outcome] = events_by_outcome.get(outcome, 0) + 1
-
-        # Calculate average risk score
-        if events:
-            avg_risk = sum(e["risk_score"] for e in events) / len(events)
-        else:
-            avg_risk = 0.0
-
-        return {
-            "project_id": project_id,
-            "total_events": len(events),
-            "events_by_type": events_by_type,
-            "events_by_outcome": events_by_outcome,
-            "average_risk_score": round(avg_risk, 4)
-        }
 
 
 # Singleton instance

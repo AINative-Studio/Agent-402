@@ -9,11 +9,15 @@ Business Logic:
 - Support for field types: string, integer, float, boolean, json, timestamp
 - Index management for optimized queries
 """
-import uuid
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
+import httpx
 from app.schemas.tables import TableSchema, FieldDefinition, FieldType
+from app.services.zerodb_client import get_zerodb_client
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,22 +53,56 @@ class TableService:
     """
 
     def __init__(self):
-        """Initialize the table service with in-memory storage."""
-        # Structure: {project_id: {table_name: Table}}
-        self._tables: Dict[str, Dict[str, Table]] = {}
-        # Index by table_id for fast lookups: {table_id: (project_id, table_name)}
-        self._table_id_index: Dict[str, Tuple[str, str]] = {}
+        """Initialize the table service with ZeroDB client."""
+        # ZeroDB client will be fetched on demand
+        pass
 
-    def generate_table_id(self) -> str:
+    def _get_client(self):
+        """Get the ZeroDB client instance."""
+        return get_zerodb_client()
+
+    def _parse_table_response(self, data: Dict[str, Any], project_id: str) -> Table:
         """
-        Generate a unique table ID.
+        Parse ZeroDB table response into Table dataclass.
+
+        Args:
+            data: Raw table data from ZeroDB API
+            project_id: Project identifier
 
         Returns:
-            str: Unique table identifier with 'tbl_' prefix
+            Table instance
         """
-        return f"tbl_{uuid.uuid4().hex[:16]}"
+        # Handle datetime parsing
+        created_at = data.get("created_at")
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                created_at = datetime.utcnow()
+        elif not isinstance(created_at, datetime):
+            created_at = datetime.utcnow()
 
-    def create_table(
+        updated_at = data.get("updated_at")
+        if isinstance(updated_at, str):
+            try:
+                updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            except (ValueError, TypeError):
+                updated_at = None
+        elif not isinstance(updated_at, datetime):
+            updated_at = None
+
+        return Table(
+            id=data.get("table_id", data.get("id", "")),
+            table_name=data.get("table_name", ""),
+            description=data.get("description"),
+            schema=data.get("schema", data.get("schema_definition", {})),
+            project_id=project_id,
+            row_count=data.get("row_count", 0),
+            created_at=created_at,
+            updated_at=updated_at
+        )
+
+    async def create_table(
         self,
         project_id: str,
         table_name: str,
@@ -86,21 +124,10 @@ class TableService:
         Raises:
             TableAlreadyExistsError: If table name already exists in project
         """
-        from app.core.errors import TableAlreadyExistsError
+        from app.core.errors import TableAlreadyExistsError, ZeroDBError
 
-        # Initialize project tables dict if not exists
-        if project_id not in self._tables:
-            self._tables[project_id] = {}
-
-        # Check for duplicate table name
-        if table_name in self._tables[project_id]:
-            raise TableAlreadyExistsError(table_name, project_id)
-
-        # Generate table ID
-        table_id = self.generate_table_id()
-
-        # Convert schema to dict for storage
-        schema_dict = {
+        # Convert schema to ZeroDB format
+        schema_definition = {
             "fields": {
                 name: {
                     "type": field_def.type.value,
@@ -112,25 +139,39 @@ class TableService:
             "indexes": schema.indexes or []
         }
 
-        # Create table instance
-        table = Table(
-            id=table_id,
-            table_name=table_name,
-            description=description,
-            schema=schema_dict,
-            project_id=project_id,
-            row_count=0,
-            created_at=datetime.utcnow(),
-            updated_at=None
-        )
+        if description:
+            schema_definition["description"] = description
 
-        # Store table
-        self._tables[project_id][table_name] = table
-        self._table_id_index[table_id] = (project_id, table_name)
+        try:
+            client = self._get_client()
+            result = await client.create_table(table_name, schema_definition)
 
-        return table, True
+            # Parse response into Table
+            table = self._parse_table_response(result, project_id)
+            return table, True
 
-    def get_table_by_id(
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                # Table already exists
+                raise TableAlreadyExistsError(table_name, project_id)
+            elif e.response.status_code == 400:
+                # Bad request - could be duplicate or invalid schema
+                error_detail = ""
+                try:
+                    error_detail = e.response.json().get("detail", "")
+                except Exception:
+                    pass
+                if "already exists" in error_detail.lower() or "duplicate" in error_detail.lower():
+                    raise TableAlreadyExistsError(table_name, project_id)
+                raise ZeroDBError(f"Failed to create table: {error_detail or str(e)}")
+            else:
+                logger.error(f"ZeroDB create_table failed: {e}")
+                raise ZeroDBError(f"Failed to create table: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"ZeroDB connection error: {e}")
+            raise ZeroDBError(f"Connection to ZeroDB failed: {e}")
+
+    async def get_table_by_id(
         self,
         table_id: str,
         project_id: str
@@ -145,18 +186,23 @@ class TableService:
         Returns:
             Table if found and belongs to project, None otherwise
         """
-        if table_id not in self._table_id_index:
-            return None
+        from app.core.errors import ZeroDBError
 
-        stored_project_id, table_name = self._table_id_index[table_id]
+        try:
+            client = self._get_client()
+            result = await client.get_table(table_id)
+            return self._parse_table_response(result, project_id)
 
-        # Verify project ownership
-        if stored_project_id != project_id:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"ZeroDB get_table failed: {e}")
+            raise ZeroDBError(f"Failed to get table: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"ZeroDB connection error: {e}")
+            raise ZeroDBError(f"Connection to ZeroDB failed: {e}")
 
-        return self._tables.get(project_id, {}).get(table_name)
-
-    def get_table_by_name(
+    async def get_table_by_name(
         self,
         table_name: str,
         project_id: str
@@ -171,9 +217,24 @@ class TableService:
         Returns:
             Table if found, None otherwise
         """
-        return self._tables.get(project_id, {}).get(table_name)
+        from app.core.errors import ZeroDBError
 
-    def list_project_tables(
+        try:
+            # ZeroDB uses table_name as identifier for get_table
+            client = self._get_client()
+            result = await client.get_table(table_name)
+            return self._parse_table_response(result, project_id)
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"ZeroDB get_table failed: {e}")
+            raise ZeroDBError(f"Failed to get table: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"ZeroDB connection error: {e}")
+            raise ZeroDBError(f"Connection to ZeroDB failed: {e}")
+
+    async def list_project_tables(
         self,
         project_id: str
     ) -> List[Table]:
@@ -186,10 +247,30 @@ class TableService:
         Returns:
             List of tables in the project (empty if none)
         """
-        project_tables = self._tables.get(project_id, {})
-        return list(project_tables.values())
+        from app.core.errors import ZeroDBError
 
-    def delete_table(
+        try:
+            client = self._get_client()
+            result = await client.list_tables()
+
+            # Parse tables from response
+            tables_data = result.get("tables", result.get("items", []))
+            if not isinstance(tables_data, list):
+                tables_data = []
+
+            return [
+                self._parse_table_response(table_data, project_id)
+                for table_data in tables_data
+            ]
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"ZeroDB list_tables failed: {e}")
+            raise ZeroDBError(f"Failed to list tables: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"ZeroDB connection error: {e}")
+            raise ZeroDBError(f"Connection to ZeroDB failed: {e}")
+
+    async def delete_table(
         self,
         table_id: str,
         project_id: str
@@ -198,37 +279,38 @@ class TableService:
         Delete a table from a project.
 
         Args:
-            table_id: Table identifier
+            table_id: Table identifier (can be table_name in ZeroDB)
             project_id: Project identifier
 
         Returns:
             Deleted Table if found and removed, None otherwise
         """
-        if table_id not in self._table_id_index:
-            return None
+        from app.core.errors import ZeroDBError
 
-        stored_project_id, table_name = self._table_id_index[table_id]
+        try:
+            # First get the table to return it after deletion
+            client = self._get_client()
+            table = await self.get_table_by_id(table_id, project_id)
+            if not table:
+                # Try by name as fallback
+                table = await self.get_table_by_name(table_id, project_id)
+                if not table:
+                    return None
 
-        # Verify project ownership
-        if stored_project_id != project_id:
-            return None
+            # Delete using table_name (ZeroDB uses name for deletion)
+            await client.delete_table(table.table_name)
+            return table
 
-        # Get table before deletion
-        table = self._tables.get(project_id, {}).get(table_name)
-        if not table:
-            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"ZeroDB delete_table failed: {e}")
+            raise ZeroDBError(f"Failed to delete table: {e}")
+        except httpx.RequestError as e:
+            logger.error(f"ZeroDB connection error: {e}")
+            raise ZeroDBError(f"Connection to ZeroDB failed: {e}")
 
-        # Remove from storage
-        del self._tables[project_id][table_name]
-        del self._table_id_index[table_id]
-
-        # Clean up empty project dict
-        if not self._tables[project_id]:
-            del self._tables[project_id]
-
-        return table
-
-    def table_exists(
+    async def table_exists(
         self,
         table_name: str,
         project_id: str
@@ -243,9 +325,10 @@ class TableService:
         Returns:
             True if table exists, False otherwise
         """
-        return table_name in self._tables.get(project_id, {})
+        table = await self.get_table_by_name(table_name, project_id)
+        return table is not None
 
-    def count_project_tables(self, project_id: str) -> int:
+    async def count_project_tables(self, project_id: str) -> int:
         """
         Count total tables for a project.
 
@@ -255,9 +338,10 @@ class TableService:
         Returns:
             Number of tables in the project
         """
-        return len(self._tables.get(project_id, {}))
+        tables = await self.list_project_tables(project_id)
+        return len(tables)
 
-    def update_row_count(
+    async def update_row_count(
         self,
         table_id: str,
         project_id: str,
@@ -267,21 +351,21 @@ class TableService:
         Update the row count for a table.
         Used when rows are inserted or deleted.
 
+        Note: In ZeroDB, row count is typically managed automatically.
+        This method is kept for interface compatibility.
+
         Args:
             table_id: Table identifier
             project_id: Project identifier
             count: New row count
 
         Returns:
-            True if updated, False if table not found
+            True if table exists, False otherwise
         """
-        table = self.get_table_by_id(table_id, project_id)
-        if not table:
-            return False
-
-        table.row_count = count
-        table.updated_at = datetime.utcnow()
-        return True
+        # ZeroDB manages row counts automatically
+        # We just verify the table exists
+        table = await self.get_table_by_id(table_id, project_id)
+        return table is not None
 
 
 # Singleton instance

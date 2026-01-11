@@ -6,13 +6,14 @@ This service provides:
 - Deterministic default model behavior (BAAI/bge-small-en-v1.5)
 - Support for multiple embedding models
 - Consistent dimension validation
-- Mock implementation for MVP (will integrate with actual embedding libraries later)
+- Real embedding generation via ZeroDB API
 
 Per PRD §10: Behavior must be deterministic and documented.
 """
 import time
 import uuid
 import hashlib
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from app.core.embedding_models import (
@@ -22,6 +23,9 @@ from app.core.embedding_models import (
     EMBEDDING_MODEL_SPECS
 )
 from app.core.errors import APIError
+from app.services.zerodb_client import get_zerodb_client
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
@@ -43,7 +47,15 @@ class EmbeddingService:
 
     def __init__(self):
         """Initialize the embedding service."""
-        self._vector_store: Dict[str, Dict[str, Any]] = {}  # In-memory store for MVP
+        self._vector_store: Dict[str, Dict[str, Any]] = {}  # Fallback for when ZeroDB is unavailable
+        self._zerodb_available = False
+        try:
+            self._zerodb_client = get_zerodb_client()
+            self._zerodb_available = True
+            logger.info("EmbeddingService initialized with ZeroDB client")
+        except ValueError as e:
+            logger.warning(f"ZeroDB client not available, using mock embeddings: {e}")
+            self._zerodb_client = None
 
     def get_model_or_default(self, model: Optional[str] = None) -> str:
         """
@@ -100,18 +112,19 @@ class EmbeddingService:
                 detail=str(e)
             )
 
-    def generate_embedding(
+    async def generate_embedding(
         self,
         text: str,
         model: Optional[str] = None
     ) -> Tuple[List[float], str, int, float]:
         """
-        Generate an embedding for the given text.
+        Generate an embedding for the given text using ZeroDB API.
 
         Issue #12 Implementation:
         - Applies default model when model parameter is None
         - Returns the actual model used (for determinism)
         - Generates exactly the correct number of dimensions for the model
+        - Uses real ZeroDB embeddings when available, falls back to mock
 
         Args:
             text: Text to generate embedding for
@@ -129,10 +142,28 @@ class EmbeddingService:
         model_used = self.get_model_or_default(model)
         dimensions = self.get_dimensions_for_model(model_used)
 
-        # Generate deterministic mock embedding based on text
-        # For MVP, we create a reproducible embedding using hash-based generation
-        # In production, this would call an actual embedding model
-        embedding = self._generate_mock_embedding(text, dimensions)
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                # Use ZeroDB API for real embeddings
+                result = await self._zerodb_client.generate_embeddings(
+                    texts=[text],
+                    model=model_used
+                )
+                embeddings = result.get("embeddings", [])
+                if embeddings and len(embeddings) > 0:
+                    embedding = embeddings[0]
+                    logger.debug(f"Generated real embedding via ZeroDB, dims={len(embedding)}")
+                else:
+                    # Fallback to mock if no embeddings returned
+                    logger.warning("ZeroDB returned empty embeddings, falling back to mock")
+                    embedding = self._generate_mock_embedding(text, dimensions)
+            except Exception as e:
+                # Fallback to mock embedding on error
+                logger.warning(f"ZeroDB embedding failed, using mock: {e}")
+                embedding = self._generate_mock_embedding(text, dimensions)
+        else:
+            # Generate mock embedding when ZeroDB is not available
+            embedding = self._generate_mock_embedding(text, dimensions)
 
         processing_time = int((time.time() - start_time) * 1000)  # Convert to milliseconds as int
 
@@ -165,7 +196,7 @@ class EmbeddingService:
 
         return embedding
 
-    def embed_and_store(
+    async def embed_and_store(
         self,
         text: str,
         model: Optional[str] = None,
@@ -177,7 +208,7 @@ class EmbeddingService:
         user_id: str = None
     ) -> Tuple[int, str, str, int, bool, int, str]:
         """
-        Generate embedding and store it in the vector store.
+        Generate embedding and store it in ZeroDB vector store.
 
         Issue #17 Implementation:
         - Supports namespace parameter for vector isolation
@@ -214,23 +245,73 @@ class EmbeddingService:
             APIError: If namespace is invalid
         """
         from app.services.vector_store_service import vector_store_service
-        from datetime import datetime
 
         start_time = time.time()
+        namespace_used = namespace or "default"
 
-        # Generate embedding
-        embedding, model_used, dimensions, _ = self.generate_embedding(text, model)
+        # Generate embedding (async)
+        embedding, model_used, dimensions, _ = await self.generate_embedding(text, model)
 
-        # Store vector using vector_store_service (Issue #17: with namespace support)
+        # Try ZeroDB first if available
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                # Generate vector_id if not provided
+                actual_vector_id = vector_id or f"vec_{uuid.uuid4().hex[:16]}"
+
+                # Prepare metadata with user context
+                vector_metadata = metadata.copy() if metadata else {}
+                if user_id:
+                    vector_metadata["user_id"] = user_id
+                if project_id:
+                    vector_metadata["project_id"] = project_id
+                vector_metadata["model"] = model_used
+                vector_metadata["dimensions"] = dimensions
+                vector_metadata["text"] = text
+
+                # Store vector in ZeroDB
+                result = await self._zerodb_client.upsert_vector(
+                    vector_embedding=embedding,
+                    document=text,
+                    namespace=namespace_used,
+                    vector_id=actual_vector_id,
+                    vector_metadata=vector_metadata
+                )
+
+                processing_time = int((time.time() - start_time) * 1000)
+                stored_at = datetime.utcnow().isoformat()
+
+                # Determine if created or updated (upsert always succeeds)
+                created = result.get("created", True)
+
+                logger.info(
+                    f"Stored vector in ZeroDB namespace '{namespace_used}'",
+                    extra={"vector_id": actual_vector_id, "dimensions": dimensions}
+                )
+
+                return (
+                    1,  # vectors_stored
+                    actual_vector_id,
+                    model_used,
+                    dimensions,
+                    created,
+                    processing_time,
+                    stored_at
+                )
+
+            except Exception as e:
+                logger.warning(f"ZeroDB storage failed, falling back to local: {e}")
+                # Fall through to local storage
+
+        # Fallback: Store vector using local vector_store_service
         try:
-            storage_result = vector_store_service.store_vector(
+            storage_result = await vector_store_service.store_vector(
                 project_id=project_id,
                 user_id=user_id,
                 text=text,
                 embedding=embedding,
                 model=model_used,
                 dimensions=dimensions,
-                namespace=namespace,
+                namespace=namespace_used,
                 metadata=metadata,
                 vector_id=vector_id,
                 upsert=upsert
@@ -306,7 +387,7 @@ class EmbeddingService:
         """
         self._vector_store.clear()
 
-    def batch_embed_and_store(
+    async def batch_embed_and_store(
         self,
         documents: List[str],
         model: Optional[str] = None,
@@ -318,7 +399,7 @@ class EmbeddingService:
         vector_ids: Optional[List[str]] = None
     ) -> Tuple[List[str], str, int, int, List[bool]]:
         """
-        Generate embeddings for multiple documents and store them.
+        Generate embeddings for multiple documents and store them via ZeroDB.
 
         Issue #16 Implementation:
         - Accept multiple documents and generate embeddings for each
@@ -377,10 +458,58 @@ class EmbeddingService:
         result_vector_ids = []
         created_flags = []  # Track whether each vector was inserted (True) or updated (False)
 
-        # Process each document
+        # Try ZeroDB batch embed-and-store if available
+        if self._zerodb_available and self._zerodb_client:
+            try:
+                # Prepare metadata list for ZeroDB
+                zerodb_metadata = []
+                for idx, document in enumerate(documents):
+                    meta = metadata_list[idx].copy() if metadata_list and idx < len(metadata_list) else {}
+                    if user_id:
+                        meta["user_id"] = user_id
+                    if project_id:
+                        meta["project_id"] = project_id
+                    meta["model"] = model_used
+                    meta["dimensions"] = dimensions
+                    zerodb_metadata.append(meta)
+
+                # Use ZeroDB embed_and_store for batch operation
+                result = await self._zerodb_client.embed_and_store(
+                    texts=documents,
+                    namespace=namespace,
+                    metadata=zerodb_metadata,
+                    model=model_used
+                )
+
+                # Extract vector IDs from result
+                stored_vectors = result.get("vectors", [])
+                for idx, vec in enumerate(stored_vectors):
+                    vid = vec.get("vector_id", f"vec_{uuid.uuid4().hex[:16]}")
+                    result_vector_ids.append(vid)
+                    created_flags.append(vec.get("created", True))
+
+                # If we got fewer results than documents, generate remaining IDs
+                while len(result_vector_ids) < len(documents):
+                    result_vector_ids.append(f"vec_{uuid.uuid4().hex[:16]}")
+                    created_flags.append(True)
+
+                processing_time = int((time.time() - start_time) * 1000)
+
+                logger.info(
+                    f"Batch stored {len(documents)} vectors in ZeroDB namespace '{namespace}'",
+                    extra={"count": len(documents), "namespace": namespace}
+                )
+
+                return result_vector_ids, model_used, dimensions, processing_time, created_flags
+
+            except Exception as e:
+                logger.warning(f"ZeroDB batch storage failed, falling back to local: {e}")
+                # Fall through to local storage
+
+        # Fallback: Process each document individually
         for idx, document in enumerate(documents):
-            # Generate embedding for this document
-            embedding, _, _, _ = self.generate_embedding(document, model_used)
+            # Generate embedding for this document (async)
+            embedding, _, _, _ = await self.generate_embedding(document, model_used)
 
             # Get vector_id for this document (provided or auto-generated)
             if vector_ids is not None:
@@ -394,7 +523,7 @@ class EmbeddingService:
             # Store vector using vector_store_service (Issue #17: with namespace support)
             # Issue #18: Handle upsert behavior
             try:
-                storage_result = vector_store_service.store_vector(
+                storage_result = await vector_store_service.store_vector(
                     project_id=project_id or "default",
                     user_id=user_id or "system",
                     text=document,
