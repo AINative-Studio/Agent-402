@@ -402,6 +402,52 @@ class RunListResponse(BaseModel):
         }
 
 
+class LatestRunInfo(BaseModel):
+    """
+    Minimal info about the latest run for stats display.
+    """
+    run_id: str = Field(..., description="Run identifier")
+    status: str = Field(..., description="Run status")
+    started_at: str = Field(..., description="When the run started")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "run_id": "run_demo_001",
+                "status": "COMPLETED",
+                "started_at": "2026-01-10T10:00:00.000Z"
+            }
+        }
+
+
+class ProjectStatsResponse(BaseModel):
+    """
+    Response schema for GET /v1/public/{project_id}/stats.
+    Returns aggregate statistics for the Overview page.
+    Per PRD Section 5.1: KPI strip with latest run status, ledger entries, memory items.
+    """
+    total_runs: int = Field(default=0, ge=0, description="Total number of runs")
+    latest_run: Optional[LatestRunInfo] = Field(None, description="Info about the most recent run")
+    total_x402_requests: int = Field(default=0, ge=0, description="Total X402 requests across all runs")
+    total_memory_entries: int = Field(default=0, ge=0, description="Total memory entries across all runs")
+    total_compliance_events: int = Field(default=0, ge=0, description="Total compliance events across all runs")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_runs": 5,
+                "latest_run": {
+                    "run_id": "run_demo_001",
+                    "status": "COMPLETED",
+                    "started_at": "2026-01-10T10:00:00.000Z"
+                },
+                "total_x402_requests": 12,
+                "total_memory_entries": 25,
+                "total_compliance_events": 18
+            }
+        }
+
+
 class ErrorResponse(BaseModel):
     """
     Standard error response per DX Contract.

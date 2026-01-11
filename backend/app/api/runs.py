@@ -28,6 +28,7 @@ from app.schemas.runs import (
     RunListResponse,
     RunDetail,
     RunReplayData,
+    ProjectStatsResponse,
     ErrorResponse
 )
 from app.services.replay_service import replay_service
@@ -140,6 +141,60 @@ async def list_runs(
         page=page,
         page_size=page_size
     )
+
+
+@router.get(
+    "/{project_id}/stats",
+    response_model=ProjectStatsResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Successfully retrieved project statistics",
+            "model": ProjectStatsResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        }
+    },
+    summary="Get project statistics",
+    description="""
+    Get aggregate statistics for a project.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Per PRD Section 5.1 (Overview):**
+    - KPI strip with latest run status
+    - Number of X402 ledger entries
+    - Number of memory items
+    - Number of compliance events
+
+    **Returns:**
+    - total_runs: Total number of runs in the project
+    - latest_run: Info about the most recent run (run_id, status, started_at)
+    - total_x402_requests: Total X402 requests across all runs
+    - total_memory_entries: Total memory entries across all runs
+    - total_compliance_events: Total compliance events across all runs
+    """
+)
+async def get_project_stats(
+    project_id: str = Path(
+        ...,
+        description="Project ID to get statistics for"
+    ),
+    current_user: str = Depends(get_current_user)
+) -> ProjectStatsResponse:
+    """
+    Get aggregate statistics for a project.
+
+    Args:
+        project_id: Project identifier
+        current_user: Authenticated user ID
+
+    Returns:
+        ProjectStatsResponse with aggregate counts
+    """
+    return replay_service.get_project_stats(project_id)
 
 
 @router.get(

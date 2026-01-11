@@ -30,7 +30,9 @@ from app.schemas.runs import (
     X402RequestRecord,
     RunSummary,
     RunDetail,
-    RunReplayData
+    RunReplayData,
+    LatestRunInfo,
+    ProjectStatsResponse
 )
 
 logger = logging.getLogger(__name__)
@@ -80,8 +82,10 @@ class ReplayService:
         """
         Initialize demo data for testing.
         Per PRD Section 9: Demo setup is deterministic with predefined data.
+        Uses project IDs matching project_store demo users.
         """
-        demo_project = "proj_demo_001"
+        # Demo data for user_1's first project
+        demo_project = "proj_demo_u1_001"
         demo_run_id = "run_demo_001"
         demo_agent_id = "agent_compliance_001"
         base_time = "2026-01-10T10:00:00.000Z"
@@ -516,6 +520,55 @@ class ReplayService:
         )
 
         return summaries, total
+
+    def get_project_stats(self, project_id: str) -> ProjectStatsResponse:
+        """
+        Get aggregate statistics for a project.
+        Per PRD Section 5.1: KPI strip with latest run status, ledger entries, memory items.
+
+        Args:
+            project_id: Project identifier
+
+        Returns:
+            ProjectStatsResponse with aggregate counts
+        """
+        runs = self._get_runs_for_project(project_id)
+
+        total_runs = len(runs)
+        total_x402_requests = 0
+        total_memory_entries = 0
+        total_compliance_events = 0
+        latest_run = None
+
+        # Aggregate counts from all runs
+        for run in runs:
+            total_x402_requests += len(self._get_x402_requests_for_run(run.run_id))
+            total_memory_entries += len(self._get_agent_memory_for_run(run.run_id))
+            total_compliance_events += len(self._get_compliance_events_for_run(run.run_id))
+
+        # Get latest run (sorted by started_at descending)
+        if runs:
+            sorted_runs = sorted(runs, key=lambda x: x.started_at, reverse=True)
+            latest = sorted_runs[0]
+            latest_run = LatestRunInfo(
+                run_id=latest.run_id,
+                status=latest.status.value,
+                started_at=latest.started_at
+            )
+
+        logger.info(
+            f"Retrieved stats for project {project_id}: "
+            f"runs={total_runs}, x402={total_x402_requests}, "
+            f"memory={total_memory_entries}, events={total_compliance_events}"
+        )
+
+        return ProjectStatsResponse(
+            total_runs=total_runs,
+            latest_run=latest_run,
+            total_x402_requests=total_x402_requests,
+            total_memory_entries=total_memory_entries,
+            total_compliance_events=total_compliance_events
+        )
 
     def get_run_detail(
         self,
