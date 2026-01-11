@@ -127,3 +127,43 @@ class InvalidTimestampException(ZeroDBException):
 
         self.timestamp = timestamp
         self.reason = reason
+
+
+class ProjectNotFoundException(ZeroDBException):
+    """
+    Raised when a project is not found by ID.
+
+    Epic 1, Story 4: GET /projects/{project_id} endpoint
+    """
+
+    def __init__(self, project_id: str):
+        detail = f"Project not found: {project_id}" if project_id else "Project not found"
+
+        super().__init__(
+            detail=detail,
+            error_code="PROJECT_NOT_FOUND",
+            status_code=404  # Not Found
+        )
+
+        self.project_id = project_id
+
+
+class UnauthorizedException(ZeroDBException):
+    """
+    Raised when a user is not authorized to access a resource.
+
+    Epic 1, Story 4: GET /projects/{project_id} endpoint
+    - Used when a user attempts to access another user's project
+    """
+
+    def __init__(self, detail: str = "Not authorized to access this resource"):
+        super().__init__(
+            detail=detail,
+            error_code="UNAUTHORIZED",
+            status_code=403  # Forbidden
+        )
+
+
+# Aliases for backward compatibility with import naming conventions
+ProjectNotFoundError = ProjectNotFoundException
+UnauthorizedError = UnauthorizedException

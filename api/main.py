@@ -27,6 +27,7 @@ from api.errors import (
     invalid_api_key_exception_handler,
     generic_http_exception_handler
 )
+from fastapi.responses import JSONResponse
 
 
 # In-memory storage for MVP (would be replaced with ZeroDB in production)
@@ -55,10 +56,62 @@ app = FastAPI(
 )
 
 
+# Custom exceptions defined before registration
+class ProjectNotFoundError(HTTPException):
+    """
+    Custom exception for project not found.
+    Returns HTTP 404 with PROJECT_NOT_FOUND error code.
+    """
+    def __init__(self, project_id: str):
+        detail = f"Project not found: {project_id}"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=detail
+        )
+        self.error_code = "PROJECT_NOT_FOUND"
+
+
+class UnauthorizedError(HTTPException):
+    """
+    Custom exception for unauthorized access.
+    Returns HTTP 403 with UNAUTHORIZED error code.
+    """
+    def __init__(self):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to access this resource"
+        )
+        self.error_code = "UNAUTHORIZED"
+
+
+async def project_not_found_exception_handler(request, exc: ProjectNotFoundError) -> JSONResponse:
+    """Handler for ProjectNotFoundError"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error_code": exc.error_code
+        }
+    )
+
+
+async def unauthorized_exception_handler(request, exc: UnauthorizedError) -> JSONResponse:
+    """Handler for UnauthorizedError"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "error_code": exc.error_code
+        }
+    )
+
+
 # Register exception handlers
 app.add_exception_handler(TierValidationError, tier_validation_exception_handler)
 app.add_exception_handler(ProjectLimitExceededError, project_limit_exception_handler)
 app.add_exception_handler(InvalidAPIKeyError, invalid_api_key_exception_handler)
+app.add_exception_handler(ProjectNotFoundError, project_not_found_exception_handler)
+app.add_exception_handler(UnauthorizedError, unauthorized_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, generic_http_exception_handler)
 
@@ -196,6 +249,67 @@ async def list_projects(
     ]
 
     return user_projects
+
+
+@app.get(
+    "/v1/public/projects/{project_id}",
+    response_model=ProjectResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Project details"},
+        401: {"model": ErrorResponse, "description": "Invalid API key"},
+        403: {"model": ErrorResponse, "description": "Not authorized to access this project"},
+        404: {"model": ErrorResponse, "description": "Project not found"},
+        422: {"model": ErrorResponse, "description": "Invalid UUID format"}
+    }
+)
+async def get_project_by_id(
+    project_id: str,
+    user_data: dict = Depends(verify_api_key)
+) -> ProjectResponse:
+    """
+    Get a single project by ID.
+
+    As per Epic 1:
+    - Returns full project details for a specific project ID
+    - User must be the owner of the project
+    - Returns 404 if project doesn't exist
+    - Returns 403 if user doesn't own the project
+    - Returns 422 if project_id is not a valid UUID
+    """
+    user_id = user_data["user_id"]
+
+    # Validate UUID format
+    try:
+        from uuid import UUID
+        project_uuid = UUID(project_id)
+        project_id_str = str(project_uuid)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid UUID format: {project_id}"
+        )
+
+    # Check if project exists
+    project_data = projects_db.get(project_id_str)
+    if not project_data:
+        raise ProjectNotFoundError(project_id=project_id_str)
+
+    # Check if user owns the project
+    if project_data.get("user_id") != user_id:
+        raise UnauthorizedError()
+
+    # Return project response
+    return ProjectResponse(
+        id=project_data["id"],
+        name=project_data["name"],
+        description=project_data.get("description"),
+        tier=project_data["tier"],
+        status=project_data["status"],
+        database_enabled=project_data["database_enabled"],
+        created_at=project_data["created_at"],
+        updated_at=project_data.get("updated_at")
+    )
 
 
 if __name__ == "__main__":

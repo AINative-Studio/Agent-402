@@ -457,5 +457,148 @@ class TestDXContractCompliance:
         assert result["status"] == "ACTIVE"
 
 
+class TestGetProjectByID:
+    """Test GET /v1/public/projects/{project_id} endpoint"""
+
+    def test_get_project_success(self, client, valid_headers):
+        """Test successfully retrieving a project by ID returns 200"""
+        # Create a project first
+        create_data = {
+            "name": "Test Project for Retrieval",
+            "description": "A project to test GET by ID",
+            "tier": "free",
+            "database_enabled": True
+        }
+        create_response = client.post("/v1/public/projects", json=create_data, headers=valid_headers)
+        assert create_response.status_code == 201
+        created_project = create_response.json()
+        project_id = created_project["id"]
+
+        # Retrieve the project by ID
+        get_response = client.get(f"/v1/public/projects/{project_id}", headers=valid_headers)
+
+        assert get_response.status_code == 200
+        result = get_response.json()
+
+        # Verify all required fields are present
+        assert "id" in result
+        assert "name" in result
+        assert "status" in result
+        assert "tier" in result
+        assert "created_at" in result
+        assert "description" in result
+        assert "database_enabled" in result
+
+        # Verify field values match created project
+        assert result["id"] == project_id
+        assert result["name"] == create_data["name"]
+        assert result["description"] == create_data["description"]
+        assert result["tier"] == create_data["tier"]
+        assert result["status"] == "ACTIVE"
+        assert result["database_enabled"] == create_data["database_enabled"]
+
+    def test_get_project_not_found(self, client, valid_headers):
+        """Test retrieving non-existent project returns 404 PROJECT_NOT_FOUND"""
+        # Use a random UUID that doesn't exist
+        fake_project_id = "550e8400-e29b-41d4-a716-446655440000"
+
+        response = client.get(f"/v1/public/projects/{fake_project_id}", headers=valid_headers)
+
+        assert response.status_code == 404
+        data = response.json()
+        assert "detail" in data
+        assert "error_code" in data
+        assert data["error_code"] == "PROJECT_NOT_FOUND"
+        assert fake_project_id in data["detail"]
+
+    def test_get_project_unauthorized_access(self, client, valid_headers):
+        """Test accessing another user's project returns 403 UNAUTHORIZED"""
+        # Create a project with one API key
+        create_data = {
+            "name": "User 1 Project",
+            "tier": "free",
+            "database_enabled": True
+        }
+        create_response = client.post("/v1/public/projects", json=create_data, headers=valid_headers)
+        assert create_response.status_code == 201
+        created_project = create_response.json()
+        project_id = created_project["id"]
+
+        # Try to access it with a different user's API key
+        other_user_headers = {"X-API-Key": "other_user_api_key_456"}
+        # First, register this API key with a different user
+        from api.main import user_api_keys
+        user_api_keys["other_user_api_key_456"] = {"user_id": "user_2", "project_limit": 3}
+
+        response = client.get(f"/v1/public/projects/{project_id}", headers=other_user_headers)
+
+        assert response.status_code == 403
+        data = response.json()
+        assert "detail" in data
+        assert "error_code" in data
+        assert data["error_code"] == "UNAUTHORIZED"
+
+    def test_get_project_invalid_uuid_format(self, client, valid_headers):
+        """Test invalid UUID format returns 422 validation error"""
+        invalid_uuid = "not-a-valid-uuid"
+
+        response = client.get(f"/v1/public/projects/{invalid_uuid}", headers=valid_headers)
+
+        assert response.status_code == 422
+        data = response.json()
+        assert "detail" in data
+
+    def test_get_project_missing_authentication(self, client):
+        """Test getting project without API key returns 401 INVALID_API_KEY"""
+        project_id = "550e8400-e29b-41d4-a716-446655440000"
+
+        response = client.get(f"/v1/public/projects/{project_id}")
+
+        assert response.status_code == 401
+        data = response.json()
+        assert "detail" in data
+        assert "error_code" in data
+        assert data["error_code"] == "INVALID_API_KEY"
+
+    def test_get_project_invalid_api_key(self, client):
+        """Test getting project with invalid API key returns 401 INVALID_API_KEY"""
+        project_id = "550e8400-e29b-41d4-a716-446655440000"
+        invalid_headers = {"X-API-Key": "invalid_key_xyz"}
+
+        response = client.get(f"/v1/public/projects/{project_id}", headers=invalid_headers)
+
+        assert response.status_code == 401
+        data = response.json()
+        assert data["error_code"] == "INVALID_API_KEY"
+
+    def test_get_project_returns_same_data_as_create(self, client, valid_headers):
+        """Test that GET returns exactly the same data as was returned by POST"""
+        # Create a project with all fields
+        create_data = {
+            "name": "Comprehensive Test Project",
+            "description": "Testing data consistency",
+            "tier": "starter",
+            "database_enabled": False
+        }
+        create_response = client.post("/v1/public/projects", json=create_data, headers=valid_headers)
+        assert create_response.status_code == 201
+        created_project = create_response.json()
+
+        # Retrieve the project
+        project_id = created_project["id"]
+        get_response = client.get(f"/v1/public/projects/{project_id}", headers=valid_headers)
+        assert get_response.status_code == 200
+        retrieved_project = get_response.json()
+
+        # Compare all fields
+        assert retrieved_project["id"] == created_project["id"]
+        assert retrieved_project["name"] == created_project["name"]
+        assert retrieved_project["description"] == created_project["description"]
+        assert retrieved_project["tier"] == created_project["tier"]
+        assert retrieved_project["status"] == created_project["status"]
+        assert retrieved_project["database_enabled"] == created_project["database_enabled"]
+        assert retrieved_project["created_at"] == created_project["created_at"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

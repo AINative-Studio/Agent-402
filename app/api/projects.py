@@ -4,10 +4,12 @@ Project API endpoints.
 Implements project creation and listing with tier-based limits.
 """
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.dependencies import verify_api_key
+from app.core.exceptions import ProjectNotFoundError, UnauthorizedError
 from app.models.project import ProjectCreate, ProjectListResponse, ProjectResponse
 from app.services.project_service import project_service
 
@@ -175,3 +177,115 @@ async def list_projects(
         limit=limit,
         offset=offset
     )
+
+
+@router.get(
+    "/{project_id}",
+    response_model=ProjectResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get project by ID",
+    description="""
+Get a single project by its unique identifier.
+
+The authenticated user must be the owner of the project to access it.
+
+**Example Response:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "my-agent-project",
+  "description": "Agent memory and compliance tracking",
+  "tier": "free",
+  "status": "ACTIVE",
+  "database_enabled": true,
+  "created_at": "2025-12-13T22:41:00Z"
+}
+```
+""",
+    responses={
+        200: {
+            "description": "Project details",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "my-agent-project",
+                        "description": "Agent memory and compliance tracking",
+                        "tier": "free",
+                        "status": "ACTIVE",
+                        "database_enabled": True,
+                        "created_at": "2025-12-13T22:41:00Z"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Invalid API key",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Invalid or missing API key. Please provide a valid X-API-Key header.",
+                        "error_code": "INVALID_API_KEY"
+                    }
+                }
+            }
+        },
+        403: {
+            "description": "Not authorized to access this project",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Not authorized to access this resource",
+                        "error_code": "UNAUTHORIZED"
+                    }
+                }
+            }
+        },
+        404: {
+            "description": "Project not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Project not found: 550e8400-e29b-41d4-a716-446655440000",
+                        "error_code": "PROJECT_NOT_FOUND"
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Invalid project ID format",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Invalid UUID format",
+                        "error_code": "VALIDATION_ERROR"
+                    }
+                }
+            }
+        }
+    }
+)
+async def get_project_by_id(
+    project_id: UUID,
+    user_id: Annotated[str, Depends(verify_api_key)]
+) -> ProjectResponse:
+    """
+    Get a single project by ID.
+
+    Args:
+        project_id: UUID of the project to retrieve
+        user_id: User ID from API key (injected by dependency)
+
+    Returns:
+        ProjectResponse with project details
+
+    Raises:
+        ProjectNotFoundError: Project doesn't exist (404)
+        UnauthorizedError: User doesn't own project (403)
+    """
+    project = project_service.get_project(user_id, project_id)
+
+    if project is None:
+        raise ProjectNotFoundError(project_id=str(project_id))
+
+    return project

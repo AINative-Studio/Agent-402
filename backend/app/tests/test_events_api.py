@@ -42,7 +42,7 @@ class TestCreateEventEndpoint:
         assert data["timestamp"] == "2026-01-10T18:30:00Z"
         assert data["status"] == "created"
 
-    def test_create_event_without_timestamp(self):
+    def test_create_event_without_timestamp(self, client, auth_headers_user1):
         """Create event without timestamp auto-generates it."""
         payload = {
             "event_type": "compliance_check",
@@ -55,7 +55,7 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201
@@ -67,7 +67,7 @@ class TestCreateEventEndpoint:
         assert "T" in data["timestamp"]
         assert data["timestamp"].endswith("Z")
 
-    def test_create_event_with_nested_data(self):
+    def test_create_event_with_nested_data(self, client, auth_headers_user1):
         """Create event with nested data object."""
         payload = {
             "event_type": "transaction_executed",
@@ -86,13 +86,13 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201
         assert response.json()["event_type"] == "transaction_executed"
 
-    def test_create_event_missing_event_type(self):
+    def test_create_event_missing_event_type(self, client, auth_headers_user1):
         """Reject request missing event_type."""
         payload = {
             "data": {"test": "value"}
@@ -101,14 +101,14 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
 
-    def test_create_event_missing_data(self):
+    def test_create_event_missing_data(self, client, auth_headers_user1):
         """Reject request missing data field."""
         payload = {
             "event_type": "test_event"
@@ -117,14 +117,14 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
 
-    def test_create_event_empty_event_type(self):
+    def test_create_event_empty_event_type(self, client, auth_headers_user1):
         """Reject empty event_type."""
         payload = {
             "event_type": "",
@@ -134,14 +134,14 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
 
-    def test_create_event_event_type_too_long(self):
+    def test_create_event_event_type_too_long(self, client, auth_headers_user1):
         """Reject event_type exceeding 100 characters."""
         payload = {
             "event_type": "a" * 101,
@@ -151,14 +151,14 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
         data = response.json()
         assert "detail" in data
 
-    def test_create_event_invalid_timestamp_format(self):
+    def test_create_event_invalid_timestamp_format(self, client, auth_headers_user1):
         """Reject invalid timestamp format."""
         invalid_timestamps = [
             "2026-01-10",  # Date only
@@ -177,7 +177,7 @@ class TestCreateEventEndpoint:
             response = client.post(
                 "/v1/public/database/events",
                 json=payload,
-                headers={"X-API-Key": "test_api_key"}
+                headers=auth_headers_user1
             )
 
             assert response.status_code == 422
@@ -185,7 +185,7 @@ class TestCreateEventEndpoint:
             assert "detail" in data
             assert "ISO8601" in str(data)
 
-    def test_create_event_data_not_object(self):
+    def test_create_event_data_not_object(self, client, auth_headers_user1):
         """Reject data that is not a JSON object."""
         # Test with array
         payload = {
@@ -196,7 +196,7 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
@@ -210,12 +210,12 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 422
 
-    def test_create_event_no_api_key(self):
+    def test_create_event_no_api_key(self, client):
         """Reject request without API key."""
         payload = {
             "event_type": "test_event",
@@ -229,7 +229,7 @@ class TestCreateEventEndpoint:
 
         assert response.status_code == 401
 
-    def test_create_event_response_format_stable(self):
+    def test_create_event_response_format_stable(self, client, auth_headers_user1):
         """Verify response format is stable per Epic 8 Story 4."""
         payload = {
             "event_type": "agent_decision",
@@ -239,7 +239,7 @@ class TestCreateEventEndpoint:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201
@@ -253,7 +253,7 @@ class TestCreateEventEndpoint:
         # Verify status is always "created"
         assert data["status"] == "created"
 
-    def test_create_event_with_various_iso8601_formats(self):
+    def test_create_event_with_various_iso8601_formats(self, client, auth_headers_user1):
         """Accept various valid ISO8601 timestamp formats."""
         valid_timestamps = [
             "2026-01-10T18:30:00Z",
@@ -272,7 +272,7 @@ class TestCreateEventEndpoint:
             response = client.post(
                 "/v1/public/database/events",
                 json=payload,
-                headers={"X-API-Key": "test_api_key"}
+                headers=auth_headers_user1
             )
 
             assert response.status_code == 201
@@ -282,11 +282,11 @@ class TestCreateEventEndpoint:
 class TestListEventsEndpoint:
     """Test GET /v1/public/database/events endpoint."""
 
-    def test_list_events_success(self):
+    def test_list_events_success(self, client, auth_headers_user1):
         """Successfully list events."""
         response = client.get(
             "/v1/public/database/events",
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 200
@@ -296,11 +296,11 @@ class TestListEventsEndpoint:
         assert isinstance(data["events"], list)
         assert isinstance(data["total"], int)
 
-    def test_list_events_with_filters(self):
+    def test_list_events_with_filters(self, client, auth_headers_user1):
         """List events with query parameters."""
         response = client.get(
             "/v1/public/database/events?event_type=agent_decision&limit=10&offset=0",
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 200
@@ -308,7 +308,7 @@ class TestListEventsEndpoint:
         assert "events" in data
         assert "total" in data
 
-    def test_list_events_no_api_key(self):
+    def test_list_events_no_api_key(self, client):
         """Reject list request without API key."""
         response = client.get("/v1/public/database/events")
         assert response.status_code == 401
@@ -317,7 +317,7 @@ class TestListEventsEndpoint:
 class TestAgentLifecycleEvents:
     """Test agent lifecycle event creation."""
 
-    def test_create_agent_decision_event(self):
+    def test_create_agent_decision_event(self, client, auth_headers_user1):
         """Create agent_decision event."""
         payload = {
             "event_type": "agent_decision",
@@ -332,14 +332,14 @@ class TestAgentLifecycleEvents:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201
         data = response.json()
         assert data["event_type"] == "agent_decision"
 
-    def test_create_agent_tool_call_event(self):
+    def test_create_agent_tool_call_event(self, client, auth_headers_user1):
         """Create agent_tool_call event."""
         payload = {
             "event_type": "agent_tool_call",
@@ -357,7 +357,7 @@ class TestAgentLifecycleEvents:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201
@@ -368,7 +368,7 @@ class TestAgentLifecycleEvents:
 class TestReplayabilityScenario:
     """Test event creation supports workflow replay per PRD §10."""
 
-    def test_events_with_explicit_timestamps_preserve_order(self):
+    def test_events_with_explicit_timestamps_preserve_order(self, client, auth_headers_user1):
         """Events with explicit timestamps preserve chronological order."""
         # Create events in specific order
         events = [
@@ -394,7 +394,7 @@ class TestReplayabilityScenario:
             response = client.post(
                 "/v1/public/database/events",
                 json=event,
-                headers={"X-API-Key": "test_api_key"}
+                headers=auth_headers_user1
             )
             assert response.status_code == 201
             created_events.append(response.json())
@@ -403,7 +403,7 @@ class TestReplayabilityScenario:
         for i, created in enumerate(created_events):
             assert created["timestamp"] == events[i]["timestamp"]
 
-    def test_compliance_event_with_full_metadata(self):
+    def test_compliance_event_with_full_metadata(self, client, auth_headers_user1):
         """Create compliance event with complete audit trail."""
         payload = {
             "event_type": "compliance_check",
@@ -428,7 +428,7 @@ class TestReplayabilityScenario:
         response = client.post(
             "/v1/public/database/events",
             json=payload,
-            headers={"X-API-Key": "test_api_key"}
+            headers=auth_headers_user1
         )
 
         assert response.status_code == 201

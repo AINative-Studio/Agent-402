@@ -59,6 +59,58 @@ curl -X GET "$BASE_URL/v1/public/projects" \
 
 ---
 
+### GET /v1/public/projects/{project_id}
+
+Get a single project by ID.
+
+**Example:**
+```bash
+curl -X GET "$BASE_URL/v1/public/projects/550e8400-e29b-41d4-a716-446655440000" \
+  -H "X-API-Key: $API_KEY"
+```
+
+**Response:**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "my-agent-project",
+  "description": "Agent memory and compliance tracking",
+  "tier": "free",
+  "status": "ACTIVE",
+  "database_enabled": true,
+  "created_at": "2025-12-13T22:41:00Z",
+  "updated_at": "2025-12-13T22:41:00Z"
+}
+```
+
+**Error Responses:**
+
+404 Not Found - Project doesn't exist:
+```json
+{
+  "detail": "Project not found: 550e8400-e29b-41d4-a716-446655440000",
+  "error_code": "PROJECT_NOT_FOUND"
+}
+```
+
+403 Forbidden - User doesn't own the project:
+```json
+{
+  "detail": "Not authorized to access this resource",
+  "error_code": "UNAUTHORIZED"
+}
+```
+
+422 Unprocessable Entity - Invalid UUID format:
+```json
+{
+  "detail": "Invalid UUID format: not-a-valid-uuid",
+  "error_code": "HTTP_ERROR"
+}
+```
+
+---
+
 ## Agents API
 
 ### POST /v1/public/{project_id}/agents

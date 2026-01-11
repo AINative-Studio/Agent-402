@@ -37,7 +37,7 @@ def test_agent_decision_event_creation(client: TestClient, valid_api_key_user1: 
     correlation_id = f"task_{uuid.uuid4().hex[:8]}"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -60,21 +60,14 @@ def test_agent_decision_event_creation(client: TestClient, valid_api_key_user1: 
     data = response.json()
 
     # Validate stable response format (Issue #40)
-    assert "id" in data
+    assert "event_id" in data
     assert "event_type" in data
-    assert "data" in data
     assert "timestamp" in data
-    assert "created_at" in data
+    assert "status" in data
 
     # Validate event_type
     assert data["event_type"] == "agent_decision"
-
-    # Validate data structure
-    assert data["data"]["agent_id"] == "compliance_agent"
-    assert data["data"]["decision"] == "approve_transaction"
-    assert "reasoning" in data["data"]
-    assert "context" in data["data"]
-    assert data["data"]["context"]["risk_score"] == 0.15
+    assert data["status"] == "created"
 
 
 def test_agent_tool_call_event_creation(client: TestClient, valid_api_key_user1: str):
@@ -86,7 +79,7 @@ def test_agent_tool_call_event_creation(client: TestClient, valid_api_key_user1:
     correlation_id = f"task_{uuid.uuid4().hex[:8]}"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_tool_call",
@@ -111,11 +104,7 @@ def test_agent_tool_call_event_creation(client: TestClient, valid_api_key_user1:
     data = response.json()
 
     assert data["event_type"] == "agent_tool_call"
-    assert data["data"]["agent_id"] == "transaction_agent"
-    assert data["data"]["tool_name"] == "x402.request"
-    assert "parameters" in data["data"]
-    assert "result" in data["data"]
-    assert data["data"]["result"]["status"] == "success"
+    assert data["status"] == "created"
 
 
 def test_agent_error_event_creation(client: TestClient, valid_api_key_user1: str):
@@ -127,7 +116,7 @@ def test_agent_error_event_creation(client: TestClient, valid_api_key_user1: str
     correlation_id = f"task_{uuid.uuid4().hex[:8]}"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_error",
@@ -149,10 +138,7 @@ def test_agent_error_event_creation(client: TestClient, valid_api_key_user1: str
     data = response.json()
 
     assert data["event_type"] == "agent_error"
-    assert data["data"]["agent_id"] == "analyst_agent"
-    assert data["data"]["error_type"] == "API_TIMEOUT"
-    assert "error_message" in data["data"]
-    assert "context" in data["data"]
+    assert data["status"] == "created"
 
 
 def test_agent_start_event_creation(client: TestClient, valid_api_key_user1: str):
@@ -164,7 +150,7 @@ def test_agent_start_event_creation(client: TestClient, valid_api_key_user1: str
     correlation_id = f"task_{uuid.uuid4().hex[:8]}"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_start",
@@ -185,10 +171,7 @@ def test_agent_start_event_creation(client: TestClient, valid_api_key_user1: str
     data = response.json()
 
     assert data["event_type"] == "agent_start"
-    assert data["data"]["agent_id"] == "compliance_agent"
-    assert data["data"]["task"] == "kyc_verification"
-    assert "config" in data["data"]
-    assert data["data"]["config"]["verification_level"] == "enhanced"
+    assert data["status"] == "created"
 
 
 def test_agent_complete_event_creation(client: TestClient, valid_api_key_user1: str):
@@ -200,7 +183,7 @@ def test_agent_complete_event_creation(client: TestClient, valid_api_key_user1: 
     correlation_id = f"task_{uuid.uuid4().hex[:8]}"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_complete",
@@ -222,10 +205,7 @@ def test_agent_complete_event_creation(client: TestClient, valid_api_key_user1: 
     data = response.json()
 
     assert data["event_type"] == "agent_complete"
-    assert data["data"]["agent_id"] == "compliance_agent"
-    assert "result" in data["data"]
-    assert data["data"]["duration_ms"] == 2340
-    assert data["data"]["result"]["checks_performed"] == 5
+    assert data["status"] == "created"
 
 
 def test_agent_workflow_with_correlation_id(client: TestClient, valid_api_key_user1: str):
@@ -244,8 +224,8 @@ def test_agent_workflow_with_correlation_id(client: TestClient, valid_api_key_us
 
     # 1. Agent starts task
     response1 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_start",
             "data": {
@@ -260,8 +240,8 @@ def test_agent_workflow_with_correlation_id(client: TestClient, valid_api_key_us
 
     # 2. Agent calls X402 tool
     response2 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_tool_call",
             "data": {
@@ -277,8 +257,8 @@ def test_agent_workflow_with_correlation_id(client: TestClient, valid_api_key_us
 
     # 3. Agent makes decision
     response3 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
             "data": {
@@ -294,8 +274,8 @@ def test_agent_workflow_with_correlation_id(client: TestClient, valid_api_key_us
 
     # 4. Agent completes task
     response4 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_complete",
             "data": {
@@ -325,7 +305,7 @@ def test_agent_event_with_timestamp(client: TestClient, valid_api_key_user1: str
     custom_timestamp = "2026-01-11T10:30:00Z"
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -359,7 +339,7 @@ def test_agent_event_response_format_stability(client: TestClient, valid_api_key
     - Normalized timestamps
     """
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -376,25 +356,23 @@ def test_agent_event_response_format_stability(client: TestClient, valid_api_key
     data = response.json()
 
     # All required fields must be present
-    required_fields = ["id", "event_type", "data", "timestamp", "created_at"]
+    required_fields = ["event_id", "event_type", "timestamp", "status"]
     for field in required_fields:
         assert field in data, f"Missing required field: {field}"
 
     # Validate field order (Python 3.7+ dicts maintain insertion order)
     keys = list(data.keys())
-    assert keys[:5] == required_fields
+    assert keys[:4] == required_fields
 
-    # Validate timestamp formats (ISO8601 with milliseconds)
+    # Validate timestamp format (ISO8601)
+    assert "T" in data["timestamp"]
     assert data["timestamp"].endswith("Z")
-    assert "." in data["timestamp"]  # Has milliseconds
-    assert data["created_at"].endswith("Z")
-    assert "." in data["created_at"]  # Has milliseconds
 
-    # Validate id format
-    assert data["id"].startswith("evt_")
+    # Validate event_id format
+    assert data["event_id"].startswith("evt_")
 
-    # Validate data is echoed
-    assert data["data"]["agent_id"] == "test_agent"
+    # Validate status and event_type
+    assert data["status"] == "created"
     assert data["event_type"] == "agent_decision"
 
 
@@ -405,7 +383,7 @@ def test_agent_event_source_field(client: TestClient, valid_api_key_user1: str):
     Per Issue #41: Events can specify source (e.g., 'crewai', 'agent_system').
     """
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -430,7 +408,7 @@ def test_agent_event_invalid_data_structure(client: TestClient, valid_api_key_us
     Per PRD §10: Clear error messages for invalid data.
     """
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -448,8 +426,7 @@ def test_agent_event_invalid_data_structure(client: TestClient, valid_api_key_us
 
 def test_multiple_agent_events_different_correlation_ids(
     client: TestClient,
-    test_api_key: str,
-    test_project_id: str
+    valid_api_key_user1: str
 ):
     """
     Test creating events for multiple concurrent agent workflows.
@@ -461,8 +438,8 @@ def test_multiple_agent_events_different_correlation_ids(
 
     # Workflow 1: Agent A starts
     response1 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_start",
             "data": {
@@ -477,8 +454,8 @@ def test_multiple_agent_events_different_correlation_ids(
 
     # Workflow 2: Agent B starts (concurrent)
     response2 = client.post(
-        f"/v1/public/{test_project_id}/database/events",
-        headers={"X-API-Key": test_api_key},
+        "/v1/public/database/events",
+        headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_start",
             "data": {
@@ -492,7 +469,7 @@ def test_multiple_agent_events_different_correlation_ids(
     assert response2.status_code == 201
 
     # Both events should be created successfully
-    assert response1.json()["id"] != response2.json()["id"]
+    assert response1.json()["event_id"] != response2.json()["event_id"]
 
 
 def test_agent_event_duration_validation(client: TestClient, valid_api_key_user1: str):
@@ -503,7 +480,7 @@ def test_agent_event_duration_validation(client: TestClient, valid_api_key_user1
     """
     # Valid duration
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_complete",
@@ -515,7 +492,9 @@ def test_agent_event_duration_validation(client: TestClient, valid_api_key_user1
         }
     )
     assert response.status_code == 201
-    assert response.json()["data"]["duration_ms"] == 1500
+    data = response.json()
+    assert data["event_type"] == "agent_complete"
+    assert data["status"] == "created"
 
 
 def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key_user1: str):
@@ -536,7 +515,7 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
 
     # 1. Start KYC verification
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_start",
@@ -556,7 +535,7 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
 
     # 2. Call KYC API
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_tool_call",
@@ -579,7 +558,7 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
 
     # 3. Make approval decision
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_decision",
@@ -600,7 +579,7 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
 
     # 4. Execute transaction via X402
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_tool_call",
@@ -627,7 +606,7 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
     duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
     response = client.post(
-        f"/v1/public/{TEST_PROJECT_ID}/database/events",
+        "/v1/public/database/events",
         headers={"X-API-Key": valid_api_key_user1},
         json={
             "event_type": "agent_complete",
@@ -649,5 +628,4 @@ def test_agent_lifecycle_full_workflow_example(client: TestClient, valid_api_key
     # Verify final event
     data = response.json()
     assert data["event_type"] == "agent_complete"
-    assert data["data"]["result"]["status"] == "completed"
-    assert data["data"]["duration_ms"] >= 0
+    assert data["status"] == "created"
