@@ -24,9 +24,9 @@ Built by AINative Dev Team
 """
 from fastapi import APIRouter, Depends, status, Path
 from app.core.auth import get_current_user
-from app.schemas.embed_store import (
-    EmbedStoreRequest,
-    EmbedStoreResponse
+from app.schemas.embeddings_store import (
+    EmbedAndStoreRequest,
+    EmbedAndStoreResponse
 )
 from app.schemas.project import ErrorResponse
 from app.services.embed_store_service import embed_store_service
@@ -40,12 +40,12 @@ router = APIRouter(
 
 @router.post(
     "/{project_id}/embeddings/embed-and-store",
-    response_model=EmbedStoreResponse,
+    response_model=EmbedAndStoreResponse,
     status_code=status.HTTP_200_OK,
     responses={
         200: {
             "description": "Successfully embedded and stored vectors",
-            "model": EmbedStoreResponse
+            "model": EmbedAndStoreResponse
         },
         401: {
             "description": "Invalid or missing API key",
@@ -102,40 +102,102 @@ router = APIRouter(
 )
 async def embed_and_store(
     project_id: str = Path(..., description="Project ID"),
-    request: EmbedStoreRequest = ...,
+    request: EmbedAndStoreRequest = ...,
     current_user: str = Depends(get_current_user)
-) -> EmbedStoreResponse:
+) -> EmbedAndStoreResponse:
     """
-    Generate embeddings for texts and store them in the vector database.
+    Generate embeddings for documents and store them in the vector database.
 
     Issue #16 Implementation:
-    - Accepts texts (array of strings)
-    - Generates embeddings for each text using the specified model
+    - Accepts documents (array of strings)
+    - Generates embeddings for each document using the specified model
     - Stores each embedding as a vector with the original text as document
-    - Returns vectors_stored count, model, dimensions, and vector_ids
+    - Returns vectors_stored, vectors_inserted, vectors_updated, model, dimensions, vector_ids, namespace, results, processing_time_ms
 
     Args:
         project_id: Project identifier
-        request: Embed-and-store request with texts, model, namespace, metadata, upsert
+        request: Embed-and-store request with documents, model, namespace, metadata, upsert
         current_user: Authenticated user ID (from X-API-Key)
 
     Returns:
-        EmbedStoreResponse with vectors_stored, model, dimensions, vector_ids
+        EmbedAndStoreResponse with all required fields
     """
-    # Call embed-store service to generate embeddings and store vectors
-    vectors_stored, model_used, dimensions, vector_ids = embed_store_service.embed_and_store(
-        texts=request.texts,
-        model=request.model,
-        namespace=request.namespace,
-        metadata=request.metadata,
-        upsert=request.upsert,
-        project_id=project_id,
-        user_id=current_user
-    )
+    import time
+    from app.schemas.embeddings_store import VectorStorageResult, VectorDetail
 
-    return EmbedStoreResponse(
-        vectors_stored=vectors_stored,
+    start_time = time.time()
+
+    # Handle per-document metadata (metadata can be a list or None)
+    per_doc_metadata = request.metadata if request.metadata else [None] * len(request.documents)
+
+    # Call embed-store service for each document
+    # Note: The current service doesn't support per-document metadata yet, so we'll call it per-document
+    vector_ids = []
+    vectors_inserted = 0
+    vectors_updated = 0
+    results = []
+
+    for idx, document in enumerate(request.documents):
+        # Get metadata for this document
+        doc_metadata = per_doc_metadata[idx] if idx < len(per_doc_metadata) else None
+
+        # Call service (which currently returns tuple for single text)
+        count, model_used, dimensions, doc_vector_ids = embed_store_service.embed_and_store(
+            texts=[document],  # Single document as array
+            model=request.model,
+            namespace=request.namespace,
+            metadata=doc_metadata,
+            upsert=request.upsert,
+            project_id=project_id,
+            user_id=current_user
+        )
+
+        # Track the vector ID and whether it was created
+        vid = doc_vector_ids[0]
+        vector_ids.append(vid)
+
+        # For now, assume all are inserted (not updated)
+        # TODO: Track actual insert vs update from vector_store_service
+        created = True
+        if created:
+            vectors_inserted += 1
+        else:
+            vectors_updated += 1
+
+        # Build result for this document
+        results.append(VectorStorageResult(
+            vector_id=vid,
+            document=document,
+            metadata=doc_metadata,
+            created=created
+        ))
+
+    processing_time_ms = int((time.time() - start_time) * 1000)
+
+    # Normalize namespace for response
+    namespace_used = request.namespace if request.namespace else "default"
+
+    # Build details if requested
+    details = None
+    if request.include_details:
+        details = [
+            VectorDetail(
+                vector_id=result.vector_id,
+                text_preview=result.document[:50] + ("..." if len(result.document) > 50 else ""),
+                status="inserted" if result.created else "updated"
+            )
+            for result in results
+        ]
+
+    return EmbedAndStoreResponse(
+        vectors_stored=len(vector_ids),
+        vectors_inserted=vectors_inserted,
+        vectors_updated=vectors_updated,
         model=model_used,
         dimensions=dimensions,
-        vector_ids=vector_ids
+        vector_ids=vector_ids,
+        namespace=namespace_used,
+        results=results,
+        processing_time_ms=processing_time_ms,
+        details=details
     )

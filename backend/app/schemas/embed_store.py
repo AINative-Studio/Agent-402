@@ -154,6 +154,12 @@ class EmbedStoreRequest(BaseModel):
         }
 
 
+class VectorResult(BaseModel):
+    """Individual vector storage result."""
+    vector_id: str = Field(..., description="Unique vector identifier")
+    document: str = Field(..., description="Original text that was embedded")
+
+
 class EmbedStoreResponse(BaseModel):
     """
     Response schema for POST /v1/public/{project_id}/embeddings/embed-and-store.
@@ -161,17 +167,24 @@ class EmbedStoreResponse(BaseModel):
     Epic 4 Story 1 (Issue #16): Return confirmation with vector IDs and count.
 
     Per Issue #16 Requirements:
-    - vectors_stored: Number of vectors successfully stored (count)
+    - stored_count: Number of vectors successfully stored (count)
     - model: Model used for embedding generation
     - dimensions: Dimensionality of the embedding vectors
     - vector_ids: Array of vector IDs for all stored texts
+    - namespace: Namespace where vectors were stored
+    - results: Detailed results for each stored vector
+    - processing_time_ms: Processing time in milliseconds
 
     Per PRD Section 6:
     - Return vector IDs for all stored documents
     - Include count for verification
     - Include model and dimensions for transparency
     """
-    vectors_stored: int = Field(
+    vector_ids: List[str] = Field(
+        ...,
+        description="Array of vector IDs for all stored texts"
+    )
+    stored_count: int = Field(
         ...,
         description="Number of vectors successfully stored",
         ge=0
@@ -184,17 +197,38 @@ class EmbedStoreResponse(BaseModel):
         ...,
         description="Dimensionality of the embedding vectors"
     )
-    vector_ids: List[str] = Field(
+    namespace: str = Field(
         ...,
-        description="Array of vector IDs for all stored texts"
+        description="Namespace where vectors were stored"
+    )
+    results: List[VectorResult] = Field(
+        ...,
+        description="Detailed results for each stored vector"
+    )
+    processing_time_ms: int = Field(
+        ...,
+        description="Processing time in milliseconds",
+        ge=0
     )
 
     class Config:
         json_schema_extra = {
             "example": {
-                "vectors_stored": 2,
+                "vector_ids": ["vec_abc123def456", "vec_xyz789ghi012"],
+                "stored_count": 2,
                 "model": "BAAI/bge-small-en-v1.5",
                 "dimensions": 384,
-                "vector_ids": ["vec_abc123def456", "vec_xyz789ghi012"]
+                "namespace": "default",
+                "results": [
+                    {
+                        "vector_id": "vec_abc123def456",
+                        "document": "Autonomous fintech agent executing compliance check"
+                    },
+                    {
+                        "vector_id": "vec_xyz789ghi012",
+                        "document": "Transaction risk assessment completed successfully"
+                    }
+                ],
+                "processing_time_ms": 52
             }
         }

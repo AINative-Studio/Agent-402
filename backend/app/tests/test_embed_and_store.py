@@ -72,7 +72,7 @@ class TestEmbedAndStoreBasic:
 
         # Verify response structure
         assert "vector_ids" in data
-        assert "stored_count" in data
+        assert "vectors_stored" in data
         assert "model" in data
         assert "dimensions" in data
         assert "namespace" in data
@@ -81,7 +81,7 @@ class TestEmbedAndStoreBasic:
 
         # Verify data values
         assert len(data["vector_ids"]) == 1
-        assert data["stored_count"] == 1
+        assert data["vectors_stored"] == 1
         assert data["model"] == "BAAI/bge-small-en-v1.5"  # Default model
         assert data["dimensions"] == 384  # Default dimensions
         assert data["namespace"] == "default"
@@ -119,7 +119,7 @@ class TestEmbedAndStoreBasic:
 
         # Verify batch processing
         assert len(data["vector_ids"]) == 3
-        assert data["stored_count"] == 3
+        assert data["vectors_stored"] == 3
         assert len(data["results"]) == 3
 
         # Verify all vector IDs are unique
@@ -398,7 +398,7 @@ class TestEmbedAndStoreDXContract:
 
         assert data1["model"] == data2["model"]
         assert data1["dimensions"] == data2["dimensions"]
-        assert data1["stored_count"] == data2["stored_count"]
+        assert data1["vectors_stored"] == data2["vectors_stored"]
 
     def test_error_format_consistency(self, client, auth_headers, project_id):
         """
