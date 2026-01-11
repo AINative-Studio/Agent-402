@@ -110,7 +110,7 @@ async def create_agent_memory(
     namespace = request.namespace or "default"
 
     # Store memory using the service
-    memory_record = agent_memory_service.store_memory(
+    memory_record = await agent_memory_service.store_memory(
         project_id=project_id,
         agent_id=request.agent_id,
         run_id=request.run_id,
@@ -225,7 +225,7 @@ async def list_agent_memories(
     memory_type_str = memory_type.value if memory_type else None
 
     # Get memories from service
-    memories, total, filters_applied = agent_memory_service.list_memories(
+    memories, total, filters_applied = await agent_memory_service.list_memories(
         project_id=project_id,
         agent_id=agent_id,
         run_id=run_id,
@@ -322,7 +322,7 @@ async def get_agent_memory(
         APIError: If memory not found (404)
     """
     # Get memory from service
-    memory = agent_memory_service.get_memory(
+    memory = await agent_memory_service.get_memory(
         project_id=project_id,
         memory_id=memory_id,
         namespace=namespace

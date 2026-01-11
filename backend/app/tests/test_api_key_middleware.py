@@ -30,7 +30,8 @@ class TestAPIKeyAuthMiddleware:
         assert "detail" in data
         assert "error_code" in data
         assert data["error_code"] == "INVALID_API_KEY"
-        assert "Missing X-API-Key header" in data["detail"]
+        # Updated message includes both X-API-Key and Bearer token options
+        assert "Authentication required" in data["detail"] or "Missing X-API-Key" in data["detail"]
 
     def test_public_endpoint_invalid_api_key(self, client):
         """

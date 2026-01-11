@@ -185,14 +185,14 @@ class AgentMemoryService:
         except httpx.HTTPStatusError as e:
             logger.error(f"ZeroDB API error storing memory: {e}")
             raise APIError(
-                message=f"Failed to store agent memory: {str(e)}",
+                detail=f"Failed to store agent memory: {str(e)}",
                 status_code=502,
                 error_code="ZERODB_ERROR"
             )
         except Exception as e:
             logger.error(f"Error storing memory: {e}")
             raise APIError(
-                message=f"Failed to store agent memory: {str(e)}",
+                detail=f"Failed to store agent memory: {str(e)}",
                 status_code=500,
                 error_code="MEMORY_STORE_ERROR"
             )
@@ -238,7 +238,7 @@ class AgentMemoryService:
                 return None
             logger.error(f"ZeroDB API error getting memory: {e}")
             raise APIError(
-                message=f"Failed to retrieve memory: {str(e)}",
+                detail=f"Failed to retrieve memory: {str(e)}",
                 status_code=502,
                 error_code="ZERODB_ERROR"
             )
@@ -331,7 +331,7 @@ class AgentMemoryService:
         except httpx.HTTPStatusError as e:
             logger.error(f"ZeroDB API error listing memories: {e}")
             raise APIError(
-                message=f"Failed to list memories: {str(e)}",
+                detail=f"Failed to list memories: {str(e)}",
                 status_code=502,
                 error_code="ZERODB_ERROR"
             )
@@ -388,7 +388,7 @@ class AgentMemoryService:
                 return False
             logger.error(f"ZeroDB API error deleting memory: {e}")
             raise APIError(
-                message=f"Failed to delete memory: {str(e)}",
+                detail=f"Failed to delete memory: {str(e)}",
                 status_code=502,
                 error_code="ZERODB_ERROR"
             )
