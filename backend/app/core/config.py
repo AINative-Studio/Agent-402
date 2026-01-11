@@ -58,6 +58,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"  # Allow extra env vars without validation errors
 
     @property
     def valid_api_keys(self) -> Dict[str, str]:
