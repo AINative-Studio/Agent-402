@@ -1,7 +1,7 @@
 """
 Standardized error handling middleware for ZeroDB API.
 
-Implements DX Contract §7 (Error Semantics):
+Implements DX Contract Section 7 (Error Semantics):
 - All errors return { detail, error_code }
 - Validation errors use HTTP 422
 - Error codes are stable and documented
@@ -10,7 +10,9 @@ This middleware ensures that ALL errors across the API include a detail field,
 regardless of their source (FastAPI exceptions, Pydantic validation, custom errors,
 or unexpected exceptions).
 
-Epic 2, Story 3: As a developer, all errors include a detail field.
+Epic 2, Issue 3: As a developer, all errors include a detail field.
+
+Reference: backend/app/schemas/errors.py for error response schemas and error codes.
 """
 from typing import Union, Dict, Any
 from fastapi import Request, status
@@ -23,6 +25,11 @@ from app.core.exceptions import ZeroDBException
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Default error messages for various scenarios
+DEFAULT_ERROR_DETAIL = "An error occurred"
+DEFAULT_VALIDATION_ERROR_DETAIL = "Validation error: Invalid request data"
+DEFAULT_INTERNAL_ERROR_DETAIL = "An unexpected error occurred. Please try again later."
+
 
 def format_error_response(
     detail: str,
@@ -33,8 +40,10 @@ def format_error_response(
     Format error response per DX Contract.
 
     All errors MUST return:
-    - detail: Human-readable error message (required)
-    - error_code: Machine-readable error code (optional but recommended)
+    - detail: Human-readable error message (required, never empty)
+    - error_code: Machine-readable error code (required, UPPER_SNAKE_CASE)
+
+    Per Epic 2, Issue 3: As a developer, all errors include a detail field.
 
     Args:
         detail: Human-readable error message
@@ -42,11 +51,19 @@ def format_error_response(
         validation_errors: Optional list of validation error details
 
     Returns:
-        Dictionary with standardized error format
+        Dictionary with standardized error format: { detail, error_code }
     """
+    # Ensure detail is never empty or None (required by DX Contract)
+    if not detail or not str(detail).strip():
+        detail = DEFAULT_ERROR_DETAIL
+
+    # Ensure error_code is never empty or None
+    if not error_code or not str(error_code).strip():
+        error_code = "ERROR"
+
     response: Dict[str, Any] = {
-        "detail": detail,
-        "error_code": error_code
+        "detail": str(detail),
+        "error_code": str(error_code)
     }
 
     # Include validation errors if present (for 422 responses)
@@ -63,17 +80,23 @@ async def zerodb_exception_handler(request: Request, exc: ZeroDBException) -> JS
     These exceptions already have detail and error_code fields,
     so we just format them consistently.
 
+    Per Epic 2, Issue 3: As a developer, all errors include a detail field.
+
     Args:
         request: FastAPI request object
         exc: ZeroDBException instance
 
     Returns:
-        JSONResponse with standardized error format
+        JSONResponse with standardized error format: { detail, error_code }
     """
+    # Ensure detail is never empty (defensive programming)
+    detail = exc.detail if exc.detail else DEFAULT_ERROR_DETAIL
+    error_code = exc.error_code if exc.error_code else "ERROR"
+
     logger.warning(
-        f"ZeroDB exception: {exc.error_code} - {exc.detail}",
+        f"ZeroDB exception: {error_code} - {detail}",
         extra={
-            "error_code": exc.error_code,
+            "error_code": error_code,
             "status_code": exc.status_code,
             "path": request.url.path
         }
@@ -82,8 +105,8 @@ async def zerodb_exception_handler(request: Request, exc: ZeroDBException) -> JS
     return JSONResponse(
         status_code=exc.status_code,
         content=format_error_response(
-            detail=exc.detail,
-            error_code=exc.error_code
+            detail=detail,
+            error_code=error_code
         ),
         headers=exc.headers
     )
@@ -96,12 +119,14 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     Ensures all HTTPException errors include a detail field.
     If the exception has an error_code attribute, use it; otherwise derive one.
 
+    Per Epic 2, Issue 3: As a developer, all errors include a detail field.
+
     Args:
         request: FastAPI request object
         exc: HTTPException instance
 
     Returns:
-        JSONResponse with standardized error format
+        JSONResponse with standardized error format: { detail, error_code }
     """
     # Extract error_code if available (from custom exceptions)
     error_code = getattr(exc, 'error_code', None)
@@ -110,8 +135,8 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     if not error_code:
         error_code = _derive_error_code_from_status(exc.status_code)
 
-    # Ensure detail is always a string
-    detail = str(exc.detail) if exc.detail else "An error occurred"
+    # Ensure detail is always a non-empty string
+    detail = str(exc.detail) if exc.detail else DEFAULT_ERROR_DETAIL
 
     logger.warning(
         f"HTTP exception: {error_code} - {detail}",
@@ -166,13 +191,14 @@ async def validation_exception_handler(
 
     # Create a human-readable detail message
     # Use the first error for the summary
+    # Per Epic 2, Issue 3: All errors include a detail field
     if errors:
         first_error = errors[0]
         field_name = first_error.get("loc", ["unknown"])[-1]
         error_msg = first_error.get("msg", "Invalid input")
         detail = f"Validation error on field '{field_name}': {error_msg}"
     else:
-        detail = "Validation error: Invalid request data"
+        detail = DEFAULT_VALIDATION_ERROR_DETAIL
 
     logger.warning(
         f"Validation error: {detail}",
@@ -201,6 +227,8 @@ async def internal_server_error_handler(request: Request, exc: Exception) -> JSO
     This is the catch-all handler for any unhandled exceptions.
     Always includes a detail field per DX Contract.
 
+    Per Epic 2, Issue 3: As a developer, all errors include a detail field.
+
     Args:
         request: FastAPI request object
         exc: Any unhandled exception
@@ -221,11 +249,11 @@ async def internal_server_error_handler(request: Request, exc: Exception) -> JSO
     )
 
     # Don't expose internal error details in production
-    # Always provide a generic but helpful message
+    # Always provide a generic but helpful message with detail field
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=format_error_response(
-            detail="An unexpected error occurred. Please try again later.",
+            detail=DEFAULT_INTERNAL_ERROR_DETAIL,
             error_code="INTERNAL_SERVER_ERROR"
         )
     )

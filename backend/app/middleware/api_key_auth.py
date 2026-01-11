@@ -57,6 +57,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         "/redoc",
         "/openapi.json",
         "/v1/public/auth/login",  # Login endpoint doesn't require auth
+        "/v1/public/auth/refresh",  # Refresh endpoint uses refresh token in body
+        "/v1/public/embeddings/models",  # Public model listing for documentation
     }
 
     # Prefix for public API endpoints that require authentication
@@ -92,7 +94,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         user_id = await self._authenticate_request(request, path)
 
         if not user_id:
-            # Check if there's a specific auth error (e.g., expired token)
+            # Check if there's a specific auth error (e.g., expired token, API key issues)
             if hasattr(request.state, "auth_error"):
                 error_info = request.state.auth_error
                 return JSONResponse(
@@ -103,12 +105,13 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                     )
                 )
 
-            # Generic authentication failure
+            # Generic authentication failure - default to INVALID_API_KEY per DX Contract
+            # Per Epic 2 Issue 2: All API key validation failures return 401 INVALID_API_KEY
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content=format_error_response(
-                    error_code="UNAUTHORIZED",
-                    detail="Authentication required. Provide X-API-Key or Authorization Bearer token."
+                    error_code="INVALID_API_KEY",
+                    detail="Missing X-API-Key header"
                 )
             )
 
@@ -131,6 +134,12 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         Authenticate the request using X-API-Key or JWT Bearer token.
 
         Per Epic 2 Story 4: Support both X-API-Key and Bearer JWT token authentication.
+        Per Epic 2 Issue 2: All API key validation failures return 401 INVALID_API_KEY.
+
+        API Key Validation Cases (all return 401 INVALID_API_KEY):
+        - Missing X-API-Key header: detail="Missing X-API-Key header"
+        - Empty API key: detail="Empty API key"
+        - Invalid/unknown API key: detail="Invalid API key"
 
         Args:
             request: The incoming HTTP request
@@ -140,8 +149,22 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             User ID if authentication succeeds, None otherwise
         """
         # Try X-API-Key authentication first
+        # Per Epic 2 Issue 2: All API key validation failures return 401 INVALID_API_KEY
         api_key = request.headers.get("X-API-Key")
-        if api_key:
+        if api_key is not None:
+            # Check for empty API key (header present but value is empty or whitespace)
+            if api_key == "" or api_key.strip() == "":
+                logger.warning(
+                    f"Empty X-API-Key for request to {path}",
+                    extra={"path": path}
+                )
+                request.state.auth_error = {
+                    "error_code": "INVALID_API_KEY",
+                    "detail": "Empty API key"
+                }
+                return None
+
+            # Validate API key against known keys
             user_id = settings.get_user_id_from_api_key(api_key)
             if user_id:
                 logger.debug(
@@ -152,8 +175,14 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
             else:
                 logger.warning(
                     f"Invalid X-API-Key for request to {path}",
-                    extra={"path": path, "api_key_prefix": api_key[:8]}
+                    extra={"path": path, "api_key_prefix": api_key[:8] if len(api_key) >= 8 else api_key}
                 )
+                # Set specific error for invalid API key (not missing, but invalid)
+                request.state.auth_error = {
+                    "error_code": "INVALID_API_KEY",
+                    "detail": "Invalid API key"
+                }
+                return None
 
         # Try JWT Bearer token authentication
         authorization = request.headers.get("Authorization")

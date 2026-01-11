@@ -2,12 +2,13 @@
 FastAPI application entry point.
 Implements ZeroDB-compliant API server per PRD and DX Contract.
 
-DX Contract §7 (Error Semantics):
+DX Contract Section 7 (Error Semantics):
 - All errors return { detail, error_code }
 - Error codes are stable and documented
 - Validation errors use HTTP 422
 
-Epic 2, Story 3: As a developer, all errors include a detail field.
+Epic 2, Issue 3: As a developer, all errors include a detail field.
+Reference: backend/app/schemas/errors.py for error response schemas.
 """
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -20,7 +21,8 @@ from app.core.middleware import (
     zerodb_exception_handler,
     http_exception_handler,
     validation_exception_handler,
-    internal_server_error_handler
+    internal_server_error_handler,
+    DEFAULT_ERROR_DETAIL
 )
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
@@ -81,10 +83,15 @@ async def api_error_handler(request: Request, exc: APIError):
     """
     Handle custom API errors with consistent format.
     Per DX Contract: All errors return { detail, error_code }.
+    Per Epic 2, Issue 3: All errors include a detail field.
     """
+    # Ensure detail and error_code are never empty (defensive programming)
+    detail = exc.detail if exc.detail else DEFAULT_ERROR_DETAIL
+    error_code = exc.error_code if exc.error_code else "ERROR"
+
     return JSONResponse(
         status_code=exc.status_code,
-        content=format_error_response(exc.error_code, exc.detail)
+        content=format_error_response(error_code, detail)
     )
 
 # 3. Handle Pydantic validation errors (HTTP 422)

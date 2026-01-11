@@ -2,6 +2,27 @@
 
 FastAPI implementation of the public projects API per PRD Epic 1 Story 2.
 
+---
+
+## SECURITY WARNING
+
+> **CRITICAL: Never expose API keys in client-side code.**
+>
+> API keys must ONLY be used in backend/server-side code. Never include them in:
+> - Frontend JavaScript (React, Vue, Angular)
+> - Mobile applications (iOS, Android, Flutter)
+> - Desktop applications distributed to users
+> - Any code that runs on user devices
+>
+> **Required Reading:**
+> - [API Key Security Guide](/docs/api/API_KEY_SECURITY.md) - Comprehensive security documentation
+> - [API Key Safety Checklist](/docs/quick-reference/API_KEY_SAFETY_CHECKLIST.md) - Quick reference
+> - [SECURITY.md](/SECURITY.md) - Full security policy
+>
+> **Correct Pattern:** Use this backend as a proxy. Clients authenticate with JWT tokens to YOUR backend, and YOUR backend authenticates to ZeroDB with the API key.
+
+---
+
 ## Features
 
 - **GET /v1/public/projects** - List user projects with authentication

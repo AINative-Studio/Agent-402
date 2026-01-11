@@ -5,12 +5,29 @@ from app.schemas.embeddings import (
     EmbeddingGenerateResponse,
     ModelInfo
 )
+from app.schemas.errors import (
+    ErrorResponse,
+    ValidationErrorResponse,
+    ValidationErrorItem,
+    ErrorCodes,
+    create_error_response,
+    ERROR_RESPONSES
+)
 
 __all__ = [
+    # Auth schemas
     "LoginRequest",
     "TokenResponse",
     "TokenPayload",
+    # Embedding schemas
     "EmbeddingGenerateRequest",
     "EmbeddingGenerateResponse",
-    "ModelInfo"
+    "ModelInfo",
+    # Error schemas
+    "ErrorResponse",
+    "ValidationErrorResponse",
+    "ValidationErrorItem",
+    "ErrorCodes",
+    "create_error_response",
+    "ERROR_RESPONSES"
 ]

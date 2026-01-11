@@ -2,6 +2,7 @@
 JWT authentication schemas for request/response validation.
 Implements Epic 2 Story 4: JWT authentication as alternative to X-API-Key.
 """
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -50,6 +51,10 @@ class TokenResponse(BaseModel):
         ...,
         description="User ID associated with the token"
     )
+    refresh_token: Optional[str] = Field(
+        default=None,
+        description="Refresh token for obtaining new access tokens"
+    )
 
     class Config:
         json_schema_extra = {
@@ -57,7 +62,92 @@ class TokenResponse(BaseModel):
                 "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
                 "token_type": "bearer",
                 "expires_in": 3600,
-                "user_id": "user_1"
+                "user_id": "user_1",
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            }
+        }
+
+
+class RefreshTokenRequest(BaseModel):
+    """
+    Refresh token request schema for POST /v1/public/auth/refresh.
+
+    Per Epic 2 Story 4: Support token refresh for long-lived sessions.
+    """
+    refresh_token: str = Field(
+        ...,
+        description="Refresh token from login response",
+        min_length=1
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            }
+        }
+
+
+class RefreshTokenResponse(BaseModel):
+    """
+    Response schema for token refresh endpoint.
+
+    Returns new access token with same format as login.
+    """
+    access_token: str = Field(
+        ...,
+        description="New JWT access token"
+    )
+    token_type: str = Field(
+        default="bearer",
+        description="Token type (always 'bearer')"
+    )
+    expires_in: int = Field(
+        ...,
+        description="Token expiration time in seconds"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                "token_type": "bearer",
+                "expires_in": 3600
+            }
+        }
+
+
+class UserInfoResponse(BaseModel):
+    """
+    User info response schema for GET /v1/public/auth/me.
+
+    Returns authenticated user details from JWT token.
+    Per Epic 2 Story 4: JWT should include user/project context.
+    """
+    user_id: str = Field(
+        ...,
+        description="User ID from the JWT token"
+    )
+    issued_at: Optional[datetime] = Field(
+        default=None,
+        description="Token issued at timestamp (ISO 8601)"
+    )
+    expires_at: Optional[datetime] = Field(
+        default=None,
+        description="Token expiration timestamp (ISO 8601)"
+    )
+    token_type: str = Field(
+        default="access",
+        description="Type of token used for authentication"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": "user_1",
+                "issued_at": "2024-01-15T10:30:00Z",
+                "expires_at": "2024-01-15T11:30:00Z",
+                "token_type": "access"
             }
         }
 
