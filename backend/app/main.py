@@ -8,12 +8,20 @@ DX Contract Section 7 (Error Semantics):
 - Validation errors use HTTP 422
 
 Epic 2, Issue 3: As a developer, all errors include a detail field.
+Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
+
+404 Error Distinction:
+- PATH_NOT_FOUND: The API endpoint/route doesn't exist (typo in URL)
+- RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+- Specific resource errors: PROJECT_NOT_FOUND, AGENT_NOT_FOUND, TABLE_NOT_FOUND
+
 Reference: backend/app/schemas/errors.py for error response schemas.
 """
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError, HTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.errors import APIError, format_error_response
 from app.core.exceptions import ZeroDBException
@@ -109,7 +117,41 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 # 4. Handle FastAPI HTTPException
 app.add_exception_handler(HTTPException, http_exception_handler)
 
-# 5. Handle all other unexpected exceptions (catch-all)
+# 5. Handle Starlette HTTPException (for cases not caught by FastAPI)
+# Per Epic 9, Issue 42: All errors return { detail, error_code }
+# Per Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND
+@app.exception_handler(StarletteHTTPException)
+async def starlette_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """
+    Handle Starlette HTTPException with consistent error format.
+    Per DX Contract: All errors return { detail, error_code }.
+    Per Epic 9, Issue 42: All error responses include detail and error_code.
+    Per Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND.
+
+    404 Error Distinction:
+    - PATH_NOT_FOUND: FastAPI/Starlette returns 404 for unknown routes
+    - RESOURCE_NOT_FOUND: Custom exceptions return 404 for missing resources
+    """
+    from app.core.middleware import _derive_error_code_from_status, _is_route_not_found
+
+    detail = str(exc.detail) if exc.detail else DEFAULT_ERROR_DETAIL
+
+    # Epic 9 Issue 43: Detect route-not-found 404s
+    if exc.status_code == 404 and _is_route_not_found(exc):
+        error_code = "PATH_NOT_FOUND"
+        detail = (
+            f"Path '{request.url.path}' not found. "
+            f"Check the API documentation for valid endpoints."
+        )
+    else:
+        error_code = _derive_error_code_from_status(exc.status_code)
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=format_error_response(error_code, detail)
+    )
+
+# 6. Handle all other unexpected exceptions (catch-all)
 app.add_exception_handler(Exception, internal_server_error_handler)
 
 

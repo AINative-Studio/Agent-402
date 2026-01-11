@@ -5,10 +5,11 @@ Implements ZeroDB-compliant API server per PRD and DX Contract.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.exceptions import HTTPException as FastAPIHTTPException
+from fastapi.exceptions import RequestValidationError, HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.errors import APIError, format_error_response
+from app.core.middleware import validation_exception_handler
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 from app.api.embeddings import router as embeddings_router
@@ -58,36 +59,61 @@ async def api_error_handler(request: Request, exc: APIError):
     )
 
 
+# Handle Pydantic validation errors (HTTP 422)
+# Per Epic 9, Issue 44: Validation errors include loc/msg/type
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """
     Handle Starlette/FastAPI HTTPException with DX Contract error format.
-    Epic 11 Story 3: Ensures 404 errors include error_code.
+    Epic 9 Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
     Per DX Contract Section 4.1: ALL errors return {detail, error_code}.
+
+    404 Error Distinction:
+    - PATH_NOT_FOUND: The API endpoint/route doesn't exist (typo in URL)
+    - RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+    - Specific resource errors: PROJECT_NOT_FOUND, AGENT_NOT_FOUND, TABLE_NOT_FOUND
 
     Note: FastAPI uses Starlette's HTTPException for route not found (404).
     This handler catches both FastAPI and Starlette HTTPExceptions.
     """
-    # Extract error_code if available, otherwise derive from status
+    # Extract error_code if available (from custom exceptions)
     error_code = getattr(exc, 'error_code', None)
-    if not error_code:
-        error_codes = {
-            400: "BAD_REQUEST",
-            401: "UNAUTHORIZED",
-            403: "FORBIDDEN",
-            404: "NOT_FOUND",
-            405: "METHOD_NOT_ALLOWED",
-            409: "CONFLICT",
-            422: "VALIDATION_ERROR",
-            429: "RATE_LIMIT_EXCEEDED",
-            500: "INTERNAL_SERVER_ERROR",
-            502: "BAD_GATEWAY",
-            503: "SERVICE_UNAVAILABLE",
-            504: "GATEWAY_TIMEOUT"
-        }
-        error_code = error_codes.get(exc.status_code, "HTTP_ERROR")
-
     detail = str(exc.detail) if exc.detail else "An error occurred"
+
+    if not error_code:
+        # Epic 9 Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND
+        if exc.status_code == 404:
+            # Check if this is FastAPI's default 404 for unknown routes
+            # FastAPI uses "Not Found" as the exact detail for route not found
+            if exc.detail == "Not Found":
+                error_code = "PATH_NOT_FOUND"
+                detail = (
+                    f"Path '{request.url.path}' not found. "
+                    f"Check the API documentation for valid endpoints."
+                )
+            else:
+                # Resource-not-found errors have custom detail messages
+                error_code = "RESOURCE_NOT_FOUND"
+        else:
+            # Derive error code from status code for other cases
+            error_codes = {
+                400: "BAD_REQUEST",
+                401: "UNAUTHORIZED",
+                403: "FORBIDDEN",
+                404: "RESOURCE_NOT_FOUND",
+                405: "METHOD_NOT_ALLOWED",
+                409: "CONFLICT",
+                422: "VALIDATION_ERROR",
+                429: "RATE_LIMIT_EXCEEDED",
+                500: "INTERNAL_SERVER_ERROR",
+                502: "BAD_GATEWAY",
+                503: "SERVICE_UNAVAILABLE",
+                504: "GATEWAY_TIMEOUT"
+            }
+            error_code = error_codes.get(exc.status_code, "HTTP_ERROR")
 
     return JSONResponse(
         status_code=exc.status_code,

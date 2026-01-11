@@ -8,6 +8,13 @@ DX Contract §7 (Error Semantics):
 - Validation errors use HTTP 422
 
 Epic 2, Story 3: As a developer, all errors include a detail field.
+Epic 9, Issue 42: All error responses include both detail and error_code fields.
+Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
+
+404 Error Distinction:
+- PATH_NOT_FOUND: The API endpoint/route doesn't exist (typo in URL)
+- RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+- Specific resource errors: PROJECT_NOT_FOUND, AGENT_NOT_FOUND, TABLE_NOT_FOUND
 """
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, status
@@ -558,6 +565,158 @@ class InvalidMetadataFilterError(APIError):
             error_code="INVALID_METADATA_FILTER",
             detail=detail
         )
+
+
+class PathNotFoundError(APIError):
+    """
+    Raised when an API endpoint/route doesn't exist.
+
+    Epic 9 Issue #43: Distinguish path vs resource 404 errors.
+    PRD Section 10: Success Criteria - Deterministic errors.
+
+    This error is distinct from RESOURCE_NOT_FOUND:
+    - PATH_NOT_FOUND: The API endpoint/route doesn't exist (typo in URL)
+    - RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+
+    Both return HTTP 404 but with different error_code values to help
+    developers quickly identify if they have a typo in the URL vs a
+    missing resource.
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: PATH_NOT_FOUND
+        - detail: Message including the invalid path
+    """
+
+    def __init__(self, path: str):
+        """
+        Initialize PathNotFoundError.
+
+        Args:
+            path: The invalid path that was requested
+        """
+        detail = (
+            f"Path '{path}' not found. "
+            f"Check the API documentation for valid endpoints."
+        )
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="PATH_NOT_FOUND",
+            detail=detail
+        )
+        self.path = path
+
+
+class ResourceNotFoundError(APIError):
+    """
+    Generic resource not found error.
+
+    Epic 9 Issue #43: Distinguish path vs resource 404 errors.
+    PRD Section 10: Success Criteria - Deterministic errors.
+
+    This is a generic base for resource-not-found errors. For specific
+    resources, use the specialized error classes:
+    - ProjectNotFoundError (PROJECT_NOT_FOUND)
+    - AgentNotFoundError (AGENT_NOT_FOUND)
+    - TableNotFoundError (TABLE_NOT_FOUND)
+
+    This error is distinct from PATH_NOT_FOUND:
+    - PATH_NOT_FOUND: The API endpoint/route doesn't exist
+    - RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: RESOURCE_NOT_FOUND
+        - detail: Message about the missing resource
+    """
+
+    def __init__(self, resource_type: str, resource_id: str):
+        """
+        Initialize ResourceNotFoundError.
+
+        Args:
+            resource_type: Type of resource (e.g., "Vector", "Namespace")
+            resource_id: ID of the resource that wasn't found
+        """
+        detail = f"{resource_type} '{resource_id}' not found"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="RESOURCE_NOT_FOUND",
+            detail=detail
+        )
+        self.resource_type = resource_type
+        self.resource_id = resource_id
+
+
+class ModelNotFoundError(APIError):
+    """
+    Raised when a requested embedding model is not found.
+
+    Epic 9 Issue #42: All errors return { detail, error_code }.
+    PRD Section 10: Success Criteria - Deterministic errors.
+
+    This error is raised when:
+    - An invalid model name is provided to embedding endpoints
+    - The model doesn't exist in the supported models list
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: MODEL_NOT_FOUND
+        - detail: Message about the missing model with available options
+    """
+
+    def __init__(self, model_name: str, available_models: list = None):
+        """
+        Initialize ModelNotFoundError.
+
+        Args:
+            model_name: Name of the model that wasn't found
+            available_models: Optional list of available model names
+        """
+        if available_models:
+            models_str = ", ".join(available_models)
+            detail = f"Model '{model_name}' not found. Available models: {models_str}"
+        else:
+            detail = f"Model '{model_name}' not found"
+
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="MODEL_NOT_FOUND",
+            detail=detail
+        )
+        self.model_name = model_name
+        self.available_models = available_models
+
+
+class VectorNotFoundError(APIError):
+    """
+    Raised when a vector is not found in the vector store.
+
+    Epic 9 Issue #42: All errors return { detail, error_code }.
+    PRD Section 10: Success Criteria - Deterministic errors.
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: VECTOR_NOT_FOUND
+        - detail: Message about the missing vector
+    """
+
+    def __init__(self, vector_id: str, namespace: str = "default"):
+        """
+        Initialize VectorNotFoundError.
+
+        Args:
+            vector_id: ID of the vector that wasn't found
+            namespace: Namespace where the vector was searched
+        """
+        detail = f"Vector '{vector_id}' not found in namespace '{namespace}'"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="VECTOR_NOT_FOUND",
+            detail=detail
+        )
+        self.vector_id = vector_id
+        self.namespace = namespace
 
 
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:

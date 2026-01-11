@@ -11,6 +11,12 @@ regardless of their source (FastAPI exceptions, Pydantic validation, custom erro
 or unexpected exceptions).
 
 Epic 2, Issue 3: As a developer, all errors include a detail field.
+Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
+
+404 Error Distinction:
+- PATH_NOT_FOUND: The API endpoint/route doesn't exist (typo in URL)
+- RESOURCE_NOT_FOUND: The endpoint exists but the resource doesn't
+- Specific resource errors: PROJECT_NOT_FOUND, AGENT_NOT_FOUND, TABLE_NOT_FOUND
 
 Reference: backend/app/schemas/errors.py for error response schemas and error codes.
 """
@@ -32,8 +38,8 @@ DEFAULT_INTERNAL_ERROR_DETAIL = "An unexpected error occurred. Please try again 
 
 
 def format_error_response(
+    error_code: str,
     detail: str,
-    error_code: str = "ERROR",
     validation_errors: Union[list, None] = None
 ) -> Dict[str, Any]:
     """
@@ -44,10 +50,11 @@ def format_error_response(
     - error_code: Machine-readable error code (required, UPPER_SNAKE_CASE)
 
     Per Epic 2, Issue 3: As a developer, all errors include a detail field.
+    Per Epic 9, Issue 42: All errors return { detail, error_code }.
 
     Args:
+        error_code: Machine-readable error code (UPPER_SNAKE_CASE)
         detail: Human-readable error message
-        error_code: Machine-readable error code
         validation_errors: Optional list of validation error details
 
     Returns:
@@ -120,6 +127,12 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     If the exception has an error_code attribute, use it; otherwise derive one.
 
     Per Epic 2, Issue 3: As a developer, all errors include a detail field.
+    Per Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND.
+
+    404 Error Distinction:
+    - PATH_NOT_FOUND: FastAPI returns 404 for unknown routes (detail="Not Found")
+    - RESOURCE_NOT_FOUND: Custom exceptions return 404 for missing resources
+      (with specific error_code like PROJECT_NOT_FOUND, AGENT_NOT_FOUND, etc.)
 
     Args:
         request: FastAPI request object
@@ -131,12 +144,23 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
     # Extract error_code if available (from custom exceptions)
     error_code = getattr(exc, 'error_code', None)
 
-    # Derive error code from status code if not provided
-    if not error_code:
-        error_code = _derive_error_code_from_status(exc.status_code)
-
     # Ensure detail is always a non-empty string
     detail = str(exc.detail) if exc.detail else DEFAULT_ERROR_DETAIL
+
+    # Epic 9 Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND
+    # FastAPI returns 404 with detail="Not Found" for unknown routes
+    # Custom resource-not-found exceptions have their own error_code attribute
+    if not error_code:
+        if exc.status_code == 404 and _is_route_not_found(exc):
+            # This is FastAPI's default 404 for unknown routes
+            error_code = "PATH_NOT_FOUND"
+            detail = (
+                f"Path '{request.url.path}' not found. "
+                f"Check the API documentation for valid endpoints."
+            )
+        else:
+            # Derive error code from status code for other cases
+            error_code = _derive_error_code_from_status(exc.status_code)
 
     logger.warning(
         f"HTTP exception: {error_code} - {detail}",
@@ -273,7 +297,7 @@ def _derive_error_code_from_status(status_code: int) -> str:
         400: "BAD_REQUEST",
         401: "UNAUTHORIZED",
         403: "FORBIDDEN",
-        404: "NOT_FOUND",
+        404: "RESOURCE_NOT_FOUND",
         405: "METHOD_NOT_ALLOWED",
         409: "CONFLICT",
         422: "VALIDATION_ERROR",
@@ -285,3 +309,33 @@ def _derive_error_code_from_status(status_code: int) -> str:
     }
 
     return error_codes.get(status_code, "HTTP_ERROR")
+
+
+def _is_route_not_found(exc: HTTPException) -> bool:
+    """
+    Detect if an HTTPException is FastAPI's default route-not-found error.
+
+    Epic 9 Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND.
+
+    FastAPI returns a 404 HTTPException with detail="Not Found" when a route
+    doesn't exist. Custom resource-not-found exceptions typically have:
+    - Custom detail messages (e.g., "Project not found: xyz")
+    - error_code attribute set
+
+    This function checks for FastAPI's default 404 signature.
+
+    Args:
+        exc: HTTPException to check
+
+    Returns:
+        True if this is FastAPI's route-not-found error, False otherwise
+    """
+    # FastAPI's default 404 has detail="Not Found" (exact match)
+    # Custom exceptions typically have more specific messages
+    if exc.status_code != 404:
+        return False
+
+    # Check for FastAPI's default detail message
+    # FastAPI uses "Not Found" as the default detail for 404 responses
+    detail = str(exc.detail) if exc.detail else ""
+    return detail == "Not Found"

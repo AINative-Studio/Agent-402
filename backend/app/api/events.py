@@ -6,8 +6,9 @@ Per PRD §6 (ZeroDB Integration) and Epic 8 (Events API).
 """
 from typing import Optional
 from datetime import datetime, timezone
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, status
 from app.schemas.event import EventCreateRequest, EventResponse, EventListResponse
+from app.core.errors import InvalidAPIKeyError
 import uuid
 
 
@@ -62,11 +63,9 @@ async def create_event(
     - `422 VALIDATION_ERROR`: Invalid event_type, data, or timestamp format
     """
     # Authentication check
+    # Per DX Contract: Use InvalidAPIKeyError for consistent error_code
     if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
-        )
+        raise InvalidAPIKeyError(detail="Missing X-API-Key header")
 
     # Auto-generate timestamp if not provided
     event_timestamp = event.timestamp
@@ -131,11 +130,9 @@ async def list_events(
     - `401 INVALID_API_KEY`: Missing or invalid API key
     """
     # Authentication check
+    # Per DX Contract: Use InvalidAPIKeyError for consistent error_code
     if not x_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
-        )
+        raise InvalidAPIKeyError(detail="Missing X-API-Key header")
 
     # In production, this would query ZeroDB events table
     # For MVP, return empty list per Epic 8 requirements
