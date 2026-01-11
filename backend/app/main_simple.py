@@ -16,6 +16,8 @@ from app.api.x402_requests import router as x402_requests_router
 from app.api.agents import router as agents_router
 from app.api.compliance_events import router as compliance_events_router
 from app.api.runs import router as runs_router
+from app.api.tables import router as tables_router
+from app.api.rows import router as rows_router
 
 
 # Create FastAPI application
@@ -92,6 +94,8 @@ app.include_router(x402_requests_router)
 app.include_router(agents_router)
 app.include_router(compliance_events_router)
 app.include_router(runs_router)
+app.include_router(tables_router)
+app.include_router(rows_router)
 
 
 # Root endpoint
