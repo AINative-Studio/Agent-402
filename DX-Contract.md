@@ -86,7 +86,25 @@ If your code follows this contract, **ZeroDB will not silently break it**.
 
 ---
 
-### 6. Error Semantics
+### 6. Projects API
+
+* **All project responses MUST include `status` field**
+* Supported statuses: `ACTIVE`, `SUSPENDED`, `DELETED`
+* Newly created projects **always** have:
+
+  ```json
+  { "status": "ACTIVE" }
+  ```
+* The `status` field will **never** be null, undefined, or omitted
+* This applies to:
+
+  * `POST /v1/public/projects` (create)
+  * `GET /v1/public/projects` (list - all items)
+  * `GET /v1/public/projects/{id}` (get details)
+
+---
+
+### 7. Error Semantics
 
 * All errors return a deterministic shape:
 

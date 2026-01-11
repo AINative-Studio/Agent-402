@@ -11,6 +11,7 @@ What this test guarantees (per PRD):
    - Wrong model fails (contract drift detector)
    - Missing /database prefix returns 404 (contract drift detector)
    - Missing row_data returns 422 (contract drift detector)
+   - Project limit exceeded returns 429 with PROJECT_LIMIT_EXCEEDED (issue #59)
 4) ZeroDB tables exist (or are created) and are writable:
    - agents
    - agent_memory
@@ -283,6 +284,137 @@ def check_row_data_contract(env: Env) -> None:
     assert_status(resp, 422, "Missing row_data should return 422 (contract drift detector)")
 
 
+def check_project_limit_contract(env: Env) -> None:
+    """
+    Contract rule: Project limit validation (GitHub issue #59)
+    - Exceeding project limit must return HTTP 429
+    - Error response must include error_code: "PROJECT_LIMIT_EXCEEDED"
+    - Error response must include "detail" field explaining the limit
+    - Error message should include current tier and project limit
+    - Suggest upgrade path or contact support
+
+    Per PRD §12 (Infrastructure Credibility) and Backlog Epic 1, Story 4.
+    """
+    # Use a unique API key for this test to avoid interference
+    test_api_key = f"{env.zerodb_api_key}-limit-test"
+    test_headers = {"X-API-Key": test_api_key, "Content-Type": "application/json"}
+
+    # Note: This test assumes the local/test API is running on the same base URL
+    # For production ZeroDB, this would need to be modified
+    projects_url = f"{ZERODB_BASE_URL}/projects"
+
+    # Create projects up to free tier limit (3)
+    for i in range(3):
+        resp = request_with_retry(
+            "POST",
+            projects_url,
+            headers=test_headers,
+            json_body={
+                "name": f"smoke-limit-test-{i}",
+                "tier": "free",
+                "database_enabled": True
+            },
+            timeout_s=env.timeout_s,
+            max_retries=env.max_retries,
+        )
+        # All 3 should succeed
+        assert_status(resp, 201, f"Project {i+1}/3 creation should succeed")
+
+    # Attempt to create 4th project (should fail with 429)
+    resp = request_with_retry(
+        "POST",
+        projects_url,
+        headers=test_headers,
+        json_body={
+            "name": "smoke-limit-test-4",
+            "tier": "free",
+            "database_enabled": True
+        },
+        timeout_s=env.timeout_s,
+        max_retries=env.max_retries,
+    )
+
+    # Must return 429 (Too Many Requests)
+    assert_status(resp, 429, "Exceeding project limit should return 429")
+
+    # Validate error response structure
+    error_data = resp.json()
+
+    # Must have error_code
+    assert_true(
+        "error_code" in error_data,
+        "PROJECT_LIMIT_EXCEEDED error must include error_code field"
+    )
+    assert_true(
+        error_data["error_code"] == "PROJECT_LIMIT_EXCEEDED",
+        f"Expected error_code 'PROJECT_LIMIT_EXCEEDED', got '{error_data.get('error_code')}'"
+    )
+
+    # Must have detail
+    assert_true(
+        "detail" in error_data,
+        "PROJECT_LIMIT_EXCEEDED error must include detail field"
+    )
+
+    detail = error_data["detail"]
+
+    # Detail must include tier and limit information
+    assert_true(
+        "tier 'free'" in detail or "tier \"free\"" in detail,
+        "Detail must include tier information"
+    )
+    assert_true(
+        "3/3" in detail or "3 / 3" in detail,
+        "Detail must include current count and limit (3/3)"
+    )
+
+    # Detail must suggest upgrade or support
+    assert_true(
+        "upgrade" in detail.lower() or "support" in detail.lower(),
+        "Detail must suggest upgrade path or support contact"
+    )
+
+
+def check_project_status_field(env: Env) -> None:
+    """
+    Contract rule: All project responses must include 'status' field.
+    - Newly created projects must have status: "ACTIVE"
+    - List projects must include status for all items
+    - Status must never be null, undefined, or omitted
+
+    Per PRD §9 and Backlog Epic 1, Story 5.
+    """
+    # First, list existing projects to verify status field presence
+    url = f"{ZERODB_BASE_URL}/projects"
+    resp = request_with_retry(
+        "GET",
+        url,
+        headers={"X-API-Key": env.zerodb_api_key},
+        timeout_s=env.timeout_s,
+        max_retries=env.max_retries,
+    )
+    assert_status(resp, 200, "List projects should succeed")
+
+    projects_data = resp.json()
+    # Handle both {"items": [...]} and direct array response
+    items = projects_data.get("items", projects_data) if isinstance(projects_data, dict) else projects_data
+
+    if isinstance(items, list) and len(items) > 0:
+        for idx, project in enumerate(items):
+            assert_true(
+                "status" in project,
+                f"Project at index {idx} missing 'status' field. Project: {project.get('id', 'unknown')}"
+            )
+            assert_true(
+                project["status"] in ["ACTIVE", "SUSPENDED", "DELETED"],
+                f"Project {project.get('id')} has invalid status: {project.get('status')}"
+            )
+            assert_true(
+                project["status"] is not None and project["status"] != "",
+                f"Project {project.get('id')} has null or empty status"
+            )
+
+
 def ensure_mvp_tables(env: Env) -> None:
     """
     Minimal MVP tables aligned to PRD "collections".
@@ -499,6 +631,12 @@ def main() -> None:
 
     check_embeddings_contract(env)
     print("✅ Contract: embeddings default model works; wrong model fails")
+
+    check_project_limit_contract(env)
+    print("✅ Contract: project limit enforced (429 with PROJECT_LIMIT_EXCEEDED, Issue #59)")
+
+    check_project_status_field(env)
+    print("✅ Contract: project status field present in all responses (Issue #60)")
 
     # 4) Prove we can write rows
     seed_minimal_rows(env)

@@ -135,6 +135,14 @@ Each agent has:
 ├── scripts/
 │   └── run_demo.py          # One-command demo
 │
+├── docs/
+│   ├── api-spec.md          # Full API specification
+│   ├── datamodel.md         # Developer guide
+│   ├── DX-Contract.md       # Guaranteed behaviors
+│   ├── project-lifecycle.md # Project status lifecycle
+│   ├── prd.md               # Product requirements
+│   └── backlog.md           # User stories
+│
 ├── .env.example
 ├── README.md
 └── pyproject.toml
@@ -163,6 +171,8 @@ API_KEY=your_zerodb_api_key
 BASE_URL=https://api.ainative.studio/v1/public
 PROJECT_ID=your_project_id
 ```
+
+> **⚠️ SECURITY WARNING:** This `.env` file contains your API key. **NEVER commit this file to version control** or expose it in client-side code. Always add `.env` to your `.gitignore` file. See [SECURITY.md](/SECURITY.md) for best practices.
 
 ---
 
@@ -238,8 +248,11 @@ This project follows the **ZeroDB DX Contract**, which guarantees:
 * Deterministic errors
 * Immutable ledgers
 * Copy-paste-safe docs
+* **Project status field consistency** (Issue #60)
 
-If the contract changes, it requires versioning.
+All project responses (create, list, get) include `status: "ACTIVE"` by default.
+
+See [DX-Contract.md](/DX-Contract.md) and [project-lifecycle.md](/project-lifecycle.md) for details.
 
 ---
 
@@ -275,6 +288,68 @@ Judges should focus on:
 * Add multi-party signing
 * Introduce agent marketplaces
 * Enforce regulatory workflows
+
+---
+
+## 🔒 Security Best Practices
+
+### ⚠️ CRITICAL: API Key Safety
+
+**NEVER expose your ZeroDB API key in:**
+- Frontend JavaScript code (React, Vue, Angular, etc.)
+- Mobile apps (iOS, Android)
+- Browser DevTools
+- Public repositories
+- Client-side environment variables
+
+**Why this matters:**
+- Anyone can extract your API key from client-side code
+- Full access to your project data, vectors, and agent memory
+- Violates SOC 2, GDPR, PCI DSS compliance requirements
+- Creates liability for fintech applications
+
+### ✅ Correct Pattern: Backend Proxy
+
+```
+[Client App] → [Your Backend API] → [ZeroDB API]
+     ↓              ↓                    ↓
+  JWT Token    API Key (secure)    Validated Request
+```
+
+**Your frontend should:**
+- Authenticate users with JWT tokens or OAuth
+- Call YOUR backend API endpoints
+- Never access ZeroDB API directly
+
+**Your backend should:**
+- Store API key in environment variables
+- Validate user authentication
+- Proxy requests to ZeroDB API
+- Implement rate limiting
+
+**Example:**
+
+```python
+# ✅ SECURE - Backend endpoint
+@app.post('/api/search')
+async def search(query: str, user: User = Depends(get_current_user)):
+    response = await httpx.post(
+        'https://api.ainative.studio/v1/public/embeddings/search',
+        headers={'X-API-Key': os.getenv('ZERODB_API_KEY')},
+        json={'query': query}
+    )
+    return response.json()
+```
+
+```javascript
+// ✅ SECURE - Frontend code
+const results = await fetch('/api/search', {
+  headers: { 'Authorization': `Bearer ${userToken}` },
+  body: JSON.stringify({ query: 'fintech agents' })
+});
+```
+
+**📚 Complete Guide:** See [SECURITY.md](/SECURITY.md) for detailed patterns, examples, and mobile app guidance.
 
 ---
 
