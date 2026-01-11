@@ -22,17 +22,28 @@ POST /database/vectors/upsert
 
 ---
 
+## Environment Variables
+
+```bash
+# Set standard environment variables
+export API_KEY="your_api_key"
+export PROJECT_ID="proj_demo_001"
+export BASE_URL="http://localhost:8000"
+```
+
 ## Minimal Example
 
 ```bash
-curl -X POST http://localhost:8000/database/vectors/upsert \
-  -H "X-API-Key: your_api_key" \
+curl -X POST "$BASE_URL/database/vectors/upsert" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "vector_embedding": [0.1, 0.2, 0.3, ...],  # 384/768/1024/1536 floats
+    "vector_embedding": [0.1, 0.2, 0.3, ...],
     "document": "Your document text here"
   }'
 ```
+
+Note: Replace `...` with actual 384, 768, 1024, or 1536 float values
 
 ---
 
@@ -135,9 +146,12 @@ curl -X POST http://localhost:8000/database/vectors/upsert \
 
 ```python
 import requests
+import os
 
-API_KEY = "your_api_key"
-BASE_URL = "http://localhost:8000"
+# Use environment variables
+API_KEY = os.getenv('API_KEY', 'your_api_key')
+PROJECT_ID = os.getenv('PROJECT_ID', 'proj_demo_001')
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:8000')
 
 # Create a 384-dimensional vector
 vector = [0.1] * 384
@@ -172,8 +186,10 @@ else:
 ## JavaScript Example
 
 ```javascript
-const API_KEY = "your_api_key";
-const BASE_URL = "http://localhost:8000";
+// Use environment variables (Node.js)
+const API_KEY = process.env.API_KEY || "your_api_key";
+const PROJECT_ID = process.env.PROJECT_ID || "proj_demo_001";
+const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
 
 // Create a 384-dimensional vector
 const vector = Array(384).fill(0.1);
@@ -322,8 +338,8 @@ response2 = requests.post(url, json={
 Retrieve all vectors in a namespace:
 
 ```bash
-curl -X GET http://localhost:8000/database/vectors/{namespace} \
-  -H "X-API-Key: your_api_key"
+curl -X GET "$BASE_URL/database/vectors/my_namespace" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 Response:

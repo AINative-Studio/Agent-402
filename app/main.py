@@ -6,6 +6,7 @@ FastAPI application with custom exception handlers for domain-specific errors.
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.api.events import router as events_router
 from app.api.projects import router as projects_router
 from app.core.config import settings
 from app.core.exceptions import ZeroDBException
@@ -56,6 +57,10 @@ For questions or issues, contact support@ainative.studio
     # Register routers
     app.include_router(
         projects_router,
+        prefix=settings.api_prefix
+    )
+    app.include_router(
+        events_router,
         prefix=settings.api_prefix
     )
 

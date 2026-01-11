@@ -17,11 +17,13 @@ pip install -r requirements.txt
 ## Step 2: Set Environment Variables (30 seconds)
 
 ```bash
-# Required for API authentication
-export ZERODB_API_KEY="test_api_key_123"
+# Required environment variables
+export API_KEY="test_api_key_123"
+export PROJECT_ID="proj_demo_001"
+export BASE_URL="http://localhost:8000"
 
-# Optional: For ZeroDB persistence (future feature)
-# export ZERODB_PROJECT_ID="your_project_id_here"
+# Optional: For production deployment
+# export BASE_URL="https://api.ainative.studio"
 ```
 
 ## Step 3: Start the API Server (10 seconds)
@@ -47,8 +49,8 @@ INFO:     Started reloader process
 
 **Create a project:**
 ```bash
-curl -X POST http://localhost:8000/v1/public/projects \
-  -H "X-API-Key: test_api_key_123" \
+curl -X POST "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "My First Project",
@@ -60,8 +62,8 @@ curl -X POST http://localhost:8000/v1/public/projects \
 
 **List projects:**
 ```bash
-curl -H "X-API-Key: test_api_key_123" \
-  http://localhost:8000/v1/public/projects
+curl -X GET "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 ## Step 5: Run Tests (30 seconds)
@@ -84,13 +86,15 @@ python3 -m pytest tests/test_projects_api.py -v
 
 ```bash
 # ✅ CORRECT - Vector operations need /database/ prefix
-curl -X POST "http://localhost:8000/v1/public/database/vectors/upsert" \
-  -H "X-API-Key: test_api_key_123" \
+curl -X POST "$BASE_URL/v1/public/database/vectors/upsert" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
   -d '{"vectors": [...]}'
 
 # ❌ INCORRECT - Missing /database/ (will return 404)
-curl -X POST "http://localhost:8000/v1/public/vectors/upsert" \
-  -H "X-API-Key: test_api_key_123" \
+curl -X POST "$BASE_URL/v1/public/vectors/upsert" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
   -d '{"vectors": [...]}'
 ```
 

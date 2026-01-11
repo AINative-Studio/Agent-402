@@ -301,6 +301,7 @@ async def search_vectors(
     from app.services.vector_store_service import DEFAULT_NAMESPACE
     namespace_used = request.namespace or DEFAULT_NAMESPACE
 
+    # Issue #26: Pass include_metadata and include_embeddings to service
     search_results = vector_store_service.search_vectors(
         project_id=project_id,
         query_embedding=query_embedding,
@@ -308,12 +309,15 @@ async def search_vectors(
         top_k=request.top_k,
         similarity_threshold=request.similarity_threshold,
         metadata_filter=request.metadata_filter,
-        user_id=None  # Don't filter by user for search (allow cross-user search within project)
+        user_id=None,  # Don't filter by user for search (allow cross-user search within project)
+        include_metadata=request.include_metadata,  # Issue #26: Toggle metadata in results
+        include_embeddings=request.include_embeddings  # Issue #21, #26: Toggle embeddings in results
     )
 
     # Convert to SearchResult objects
     results = []
     for result in search_results:
+        # Issue #26: Metadata and embeddings are conditionally included by service
         search_result = SearchResult(
             vector_id=result["vector_id"],
             namespace=result["namespace"],
@@ -321,8 +325,8 @@ async def search_vectors(
             similarity=result["similarity"],
             model=result["model"],
             dimensions=result["dimensions"],
-            metadata=result["metadata"],
-            embedding=result.get("embedding") if request.include_embeddings else None,
+            metadata=result.get("metadata"),  # None if include_metadata=false
+            embedding=result.get("embedding"),  # None if include_embeddings=false
             created_at=result["created_at"]
         )
         results.append(search_result)

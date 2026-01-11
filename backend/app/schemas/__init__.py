@@ -13,6 +13,12 @@ from app.schemas.errors import (
     create_error_response,
     ERROR_RESPONSES
 )
+from app.schemas.event import (
+    EventCreateRequest,
+    EventResponse,
+    EventListResponse,
+    AgentLifecycleEvent
+)
 
 __all__ = [
     # Auth schemas
@@ -29,5 +35,10 @@ __all__ = [
     "ValidationErrorItem",
     "ErrorCodes",
     "create_error_response",
-    "ERROR_RESPONSES"
+    "ERROR_RESPONSES",
+    # Event schemas
+    "EventCreateRequest",
+    "EventResponse",
+    "EventListResponse",
+    "AgentLifecycleEvent",
 ]

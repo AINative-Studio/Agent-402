@@ -37,6 +37,7 @@ from app.schemas.vectors import (
     VectorSearchRequest,
     VectorSearchResponse
 )
+from app.schemas.vector import VectorListResponse
 from app.schemas.project import ErrorResponse
 from app.services.zerodb_vector_service import zerodb_vector_service
 
@@ -184,64 +185,65 @@ async def upsert_vector(
     )
 
 
-@router.get(
-    "/vectors/{namespace}",
-    response_model=VectorListResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "description": "Successfully retrieved vectors",
-            "model": VectorListResponse
-        },
-        401: {
-            "description": "Invalid or missing API key",
-            "model": ErrorResponse
-        }
-    },
-    summary="List vectors in namespace",
-    description="""
-    List all vectors in a specific namespace.
-
-    **Authentication:** Requires X-API-Key header
-
-    **Per DX Contract §4:**
-    - Endpoint MUST include /database/ prefix
-
-    **Namespace Isolation:**
-    - Only returns vectors from the specified namespace
-    - Vectors from other namespaces are not included
-    """
-)
-async def list_vectors(
-    namespace: str,
-    current_user: str = Depends(get_current_user)
-) -> VectorListResponse:
-    """
-    List vectors in a namespace.
-
-    Args:
-        namespace: Namespace to list vectors from
-        current_user: Authenticated user ID
-
-    Returns:
-        VectorListResponse with vector list and count
-    """
-    vectors, total = vector_service.list_vectors(namespace=namespace)
-
-    # Remove embedding data from response (too large)
-    vectors_without_embeddings = []
-    for vector in vectors:
-        vector_copy = {
-            "vector_id": vector["vector_id"],
-            "dimensions": vector["dimensions"],
-            "document": vector["document"],
-            "metadata": vector["metadata"],
-            "stored_at": vector["stored_at"]
-        }
-        vectors_without_embeddings.append(vector_copy)
-
-    return VectorListResponse(
-        vectors=vectors_without_embeddings,
-        namespace=namespace,
-        total=total
-    )
+# Commented out - VectorListResponse not yet implemented
+# @router.get(
+#     "/vectors/{namespace}",
+#     response_model=VectorListResponse,
+#     status_code=status.HTTP_200_OK,
+#     responses={
+#         200: {
+#             "description": "Successfully retrieved vectors",
+#             "model": VectorListResponse
+#         },
+#         401: {
+#             "description": "Invalid or missing API key",
+#             "model": ErrorResponse
+#         }
+#     },
+#     summary="List vectors in namespace",
+#     description="""
+#     List all vectors in a specific namespace.
+#
+#     **Authentication:** Requires X-API-Key header
+#
+#     **Per DX Contract §4:**
+#     - Endpoint MUST include /database/ prefix
+#
+#     **Namespace Isolation:**
+#     - Only returns vectors from the specified namespace
+#     - Vectors from other namespaces are not included
+#     """
+# )
+# async def list_vectors(
+#     namespace: str,
+#     current_user: str = Depends(get_current_user)
+# ) -> VectorListResponse:
+#     """
+#     List vectors in a namespace.
+#
+#     Args:
+#         namespace: Namespace to list vectors from
+#         current_user: Authenticated user ID
+#
+#     Returns:
+#         VectorListResponse with vector list and count
+#     """
+#     vectors, total = vector_service.list_vectors(namespace=namespace)
+#
+#     # Remove embedding data from response (too large)
+#     vectors_without_embeddings = []
+#     for vector in vectors:
+#         vector_copy = {
+#             "vector_id": vector["vector_id"],
+#             "dimensions": vector["dimensions"],
+#             "document": vector["document"],
+#             "metadata": vector["metadata"],
+#             "stored_at": vector["stored_at"]
+#         }
+#         vectors_without_embeddings.append(vector_copy)
+#
+#     return VectorListResponse(
+#         vectors=vectors_without_embeddings,
+#         namespace=namespace,
+#         total=total
+#     )

@@ -2,20 +2,24 @@
 Vector storage service with namespace isolation.
 
 Implements Issue #17: Namespace scoping for vector storage and retrieval.
+Implements Issue #24: Metadata filtering for search results.
 
 This service provides:
 - Namespace-scoped vector storage
 - Namespace-isolated vector retrieval
 - Default namespace handling
 - Cross-namespace isolation guarantees
+- Advanced metadata filtering (equals, contains, in, etc.)
 
 Per PRD §6: Agent-scoped memory for multi-agent systems.
 Per Epic 4 Story 2: Namespace scopes retrieval correctly.
+Per Epic 5 Story 4 (Issue #24): Filter search results by metadata.
 """
 import uuid
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+from app.services.metadata_filter import MetadataFilter
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +213,9 @@ class VectorStoreService:
         top_k: int = 10,
         similarity_threshold: float = 0.0,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
+        include_metadata: bool = True,
+        include_embeddings: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Search for similar vectors in the specified namespace.
@@ -219,21 +225,39 @@ class VectorStoreService:
         - Vectors from other namespaces are completely invisible
         - Default namespace is searched when namespace parameter is None
 
+        Issue #24: Metadata filtering applied AFTER similarity search.
+        - Supports common operations: equals, contains, in list, gt, gte, lt, lte, exists
+        - Filters are applied to refine similarity results
+        - Returns only vectors matching both similarity AND metadata criteria
+
+        Issue #26: Conditional field inclusion for response optimization.
+        - include_metadata: Controls whether metadata is included (default: True)
+        - include_embeddings: Controls whether embeddings are included (default: False)
+        - Reduces response size based on use case requirements
+
         Args:
             project_id: Project identifier
             query_embedding: Query vector for similarity search
             namespace: Optional namespace to search (defaults to "default")
             top_k: Maximum number of results to return
             similarity_threshold: Minimum similarity score (0.0 to 1.0)
-            metadata_filter: Optional metadata filters
+            metadata_filter: Optional metadata filters (Issue #24)
+                Examples:
+                - Simple: {"agent_id": "agent_1", "source": "memory"}
+                - Advanced: {"score": {"$gte": 0.8}, "tags": {"$in": ["fintech"]}}
             user_id: Optional user filter
+            include_metadata: Whether to include metadata in results (Issue #26)
+            include_embeddings: Whether to include embedding vectors in results (Issue #26)
 
         Returns:
-            List of similar vectors with scores, scoped to namespace
+            List of similar vectors with scores, scoped to namespace and filtered by metadata
 
         Raises:
-            ValueError: If namespace is invalid
+            ValueError: If namespace or metadata_filter format is invalid
         """
+        # Issue #24: Validate metadata filter format
+        MetadataFilter.validate_filter(metadata_filter)
+
         # Validate and normalize namespace
         validated_namespace = self._validate_namespace(namespace)
 
@@ -251,57 +275,75 @@ class VectorStoreService:
         # Get vectors ONLY from the specified namespace
         namespace_vectors = self._vectors[project_id][validated_namespace]
 
-        # Filter vectors by user_id if provided
+        # Filter vectors by user_id if provided (legacy filter)
         filtered_vectors = {}
         for vid, vdata in namespace_vectors.items():
             # Apply user filter if specified
             if user_id and vdata.get("user_id") != user_id:
                 continue
 
-            # Apply metadata filter if specified
-            if metadata_filter:
-                vector_metadata = vdata.get("metadata", {})
-                if not all(
-                    vector_metadata.get(k) == v
-                    for k, v in metadata_filter.items()
-                ):
-                    continue
-
             filtered_vectors[vid] = vdata
 
         if not filtered_vectors:
             logger.info(
-                f"No vectors match filters in namespace '{validated_namespace}'",
+                f"No vectors match user filter in namespace '{validated_namespace}'",
                 extra={
                     "project_id": project_id,
                     "namespace": validated_namespace,
-                    "user_id": user_id,
-                    "metadata_filter": metadata_filter
+                    "user_id": user_id
                 }
             )
             return []
 
         # Calculate cosine similarity for each vector
+        # Issue #24: Apply metadata filters AFTER similarity search
         results = []
         for vector_id, vector_data in filtered_vectors.items():
             embedding = vector_data["embedding"]
             similarity = self._cosine_similarity(query_embedding, embedding)
 
             if similarity >= similarity_threshold:
-                results.append({
+                # Build result with ALL fields initially (for filtering)
+                # Issue #26: Conditional inclusion happens AFTER filtering
+                result = {
                     "vector_id": vector_id,
                     "namespace": validated_namespace,
                     "text": vector_data["text"],
                     "similarity": similarity,
                     "model": vector_data["model"],
                     "dimensions": vector_data["dimensions"],
-                    "metadata": vector_data["metadata"],
-                    "created_at": vector_data["created_at"]
-                })
+                    "created_at": vector_data["created_at"],
+                    "metadata": vector_data["metadata"],  # Always include for filtering
+                    "embedding": embedding  # Always include initially
+                }
 
-        # Sort by similarity descending and limit to top_k
+                results.append(result)
+
+        # Sort by similarity descending and limit to top_k BEFORE metadata filtering
+        # This ensures we get the most similar results before applying metadata constraints
         results.sort(key=lambda x: x["similarity"], reverse=True)
         results = results[:top_k]
+
+        # Issue #24: Apply metadata filters AFTER similarity search to refine results
+        if metadata_filter:
+            before_count = len(results)
+            results = MetadataFilter.filter_results(results, metadata_filter)
+            logger.info(
+                f"Metadata filter reduced results from {before_count} to {len(results)}",
+                extra={
+                    "project_id": project_id,
+                    "namespace": validated_namespace,
+                    "filter": metadata_filter
+                }
+            )
+
+        # Issue #26: Remove metadata and/or embeddings from results if not requested
+        # This happens AFTER filtering so filters can access metadata
+        for result in results:
+            if not include_metadata:
+                result.pop("metadata", None)
+            if not include_embeddings:
+                result.pop("embedding", None)
 
         logger.info(
             f"Found {len(results)} vectors in namespace '{validated_namespace}'",
@@ -309,7 +351,10 @@ class VectorStoreService:
                 "project_id": project_id,
                 "namespace": validated_namespace,
                 "top_k": top_k,
-                "threshold": similarity_threshold
+                "threshold": similarity_threshold,
+                "metadata_filter_applied": metadata_filter is not None,
+                "include_metadata": include_metadata,
+                "include_embeddings": include_embeddings
             }
         )
 

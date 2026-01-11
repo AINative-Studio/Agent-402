@@ -103,3 +103,27 @@ class InvalidAPIKeyException(ZeroDBException):
             error_code="INVALID_API_KEY",
             status_code=401  # Unauthorized
         )
+
+
+class InvalidTimestampException(ZeroDBException):
+    """
+    Raised when an invalid timestamp format is provided.
+
+    Per backlog Epic 8 (Events API) - clear error handling for invalid timestamps.
+    """
+
+    def __init__(self, timestamp: str, reason: str):
+        detail = (
+            f"Invalid timestamp '{timestamp}'. "
+            f"Expected ISO8601 format (e.g., '2025-01-11T22:00:00Z' or '2025-01-11T22:00:00+00:00'). "
+            f"Error: {reason}"
+        )
+
+        super().__init__(
+            detail=detail,
+            error_code="INVALID_TIMESTAMP",
+            status_code=422  # Unprocessable Entity
+        )
+
+        self.timestamp = timestamp
+        self.reason = reason

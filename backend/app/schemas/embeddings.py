@@ -385,7 +385,12 @@ class EmbeddingSearchRequest(BaseModel):
         default=10,
         ge=1,
         le=100,
-        description="Maximum number of results to return (1-100)"
+        description=(
+            "Maximum number of results to return (1-100). "
+            "Issue #22: Limits the search results to the top K most similar vectors. "
+            "Results are ordered by similarity score (descending). "
+            "If fewer vectors exist than top_k, all available vectors are returned."
+        )
     )
     similarity_threshold: float = Field(
         default=0.0,
@@ -395,11 +400,26 @@ class EmbeddingSearchRequest(BaseModel):
     )
     metadata_filter: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Optional metadata filters to apply to search results"
+        description=(
+            "Optional metadata filters to apply to search results (Issue #24). "
+            "Supports: equals, $in, $contains, $gt, $gte, $lt, $lte, $exists, $not_equals. "
+            "Applied AFTER similarity search to refine results."
+        )
+    )
+    include_metadata: bool = Field(
+        default=True,
+        description=(
+            "Whether to include metadata in response (Issue #26). "
+            "Default: true. Set to false to reduce response size when metadata is not needed."
+        )
     )
     include_embeddings: bool = Field(
         default=False,
-        description="Whether to include embedding vectors in response (for debugging)"
+        description=(
+            "Whether to include embedding vectors in response (Issue #26). "
+            "Default: false. Set to true when embeddings are needed for further processing. "
+            "WARNING: Including embeddings significantly increases response size."
+        )
     )
 
     @validator('query')
@@ -424,6 +444,35 @@ class EmbeddingSearchRequest(BaseModel):
 
         return v
 
+    @validator('namespace')
+    def validate_namespace(cls, v):
+        """
+        Validate namespace format (Issue #23).
+
+        Same validation rules as storage:
+        - Alphanumeric characters, hyphens, underscores, and dots only
+        - Max 128 characters
+        - No path traversal attempts
+        """
+        if v is None:
+            return None  # Will default to "default" in service layer
+
+        # Check for invalid characters
+        if not all(c.isalnum() or c in ['-', '_', '.'] for c in v):
+            raise ValueError(
+                "Namespace can only contain alphanumeric characters, hyphens, underscores, and dots"
+            )
+
+        # Check length
+        if len(v) > 128:
+            raise ValueError("Namespace cannot exceed 128 characters")
+
+        # Check not empty after stripping
+        if not v.strip():
+            raise ValueError("Namespace cannot be empty or whitespace")
+
+        return v
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -433,25 +482,37 @@ class EmbeddingSearchRequest(BaseModel):
                 "top_k": 5,
                 "similarity_threshold": 0.7,
                 "metadata_filter": {
-                    "agent_id": "compliance_agent"
+                    "agent_id": "compliance_agent",
+                    "score": {"$gte": 0.8},
+                    "status": {"$in": ["active", "completed"]}
                 },
+                "include_metadata": True,
                 "include_embeddings": False
             }
         }
 
 
 class SearchResult(BaseModel):
-    """Individual search result with similarity score."""
+    """
+    Individual search result with similarity score.
+
+    Issue #26 - Conditional field inclusion:
+    - metadata: Optional, only included if include_metadata=true
+    - embedding: Optional, only included if include_embeddings=true
+    """
     vector_id: str = Field(..., description="Unique identifier of the matched vector")
     namespace: str = Field(..., description="Namespace where vector was found (Issue #17)")
     text: str = Field(..., description="Original text of the matched vector")
     similarity: float = Field(..., description="Similarity score (0.0-1.0)", ge=0.0, le=1.0)
     model: str = Field(..., description="Model used to generate this vector")
     dimensions: int = Field(..., description="Dimensionality of the vector")
-    metadata: Dict[str, Any] = Field(..., description="Vector metadata")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Vector metadata (only if include_metadata=true in request, Issue #26)"
+    )
     embedding: Optional[List[float]] = Field(
         default=None,
-        description="Embedding vector (only if include_embeddings=true)"
+        description="Embedding vector (only if include_embeddings=true in request, Issue #26)"
     )
     created_at: str = Field(..., description="ISO timestamp when vector was created")
 

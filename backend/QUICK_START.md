@@ -37,11 +37,20 @@ Server will start at: http://localhost:8000
 
 ## Test the API
 
+### Set Environment Variables
+
+```bash
+# Set standard environment variables
+export API_KEY="demo_key_user1_abc123"
+export PROJECT_ID="proj_demo_001"
+export BASE_URL="http://localhost:8000"
+```
+
 ### List Projects (User 1)
 
 ```bash
-curl -X GET "http://localhost:8000/v1/public/projects" \
-  -H "X-API-Key: demo_key_user1_abc123"
+curl -X GET "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 Expected: 2 projects
@@ -49,7 +58,7 @@ Expected: 2 projects
 ### List Projects (User 2)
 
 ```bash
-curl -X GET "http://localhost:8000/v1/public/projects" \
+curl -X GET "$BASE_URL/v1/public/projects" \
   -H "X-API-Key: demo_key_user2_xyz789"
 ```
 
@@ -59,10 +68,10 @@ Expected: 3 projects
 
 ```bash
 # Missing API key (should return 401)
-curl -X GET "http://localhost:8000/v1/public/projects"
+curl -X GET "$BASE_URL/v1/public/projects"
 
 # Invalid API key (should return 401)
-curl -X GET "http://localhost:8000/v1/public/projects" \
+curl -X GET "$BASE_URL/v1/public/projects" \
   -H "X-API-Key: invalid_key"
 ```
 

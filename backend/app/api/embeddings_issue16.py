@@ -5,13 +5,18 @@ Implements Epic 4 Story 1: embed-and-store endpoint for batch document storage.
 Endpoints:
 - POST /v1/public/{project_id}/embeddings/generate
 - POST /v1/public/{project_id}/embeddings/embed-and-store (Issue #16)
+- POST /v1/public/{project_id}/embeddings/search (Issue #22)
 - GET /embeddings/models
 """
+import time
 from fastapi import APIRouter, Depends, status, Path
 from app.core.auth import get_current_user
 from app.schemas.embeddings import (
     EmbeddingGenerateRequest,
     EmbeddingGenerateResponse,
+    EmbeddingSearchRequest,
+    EmbeddingSearchResponse,
+    SearchResult,
     ModelInfo,
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_EMBEDDING_DIMENSIONS,
@@ -24,6 +29,7 @@ from app.schemas.embeddings_store import (
 )
 from app.schemas.project import ErrorResponse
 from app.services.embedding_service import embedding_service
+from app.services.vector_store_service import vector_store_service, DEFAULT_NAMESPACE
 
 
 router = APIRouter(
@@ -224,6 +230,136 @@ async def embed_and_store(
         dimensions=dimensions,
         namespace=request.namespace,
         results=results,
+        processing_time_ms=processing_time
+    )
+
+
+@router.post(
+    "/{project_id}/embeddings/search",
+    response_model=EmbeddingSearchResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Successfully searched vectors",
+            "model": EmbeddingSearchResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        422: {
+            "description": "Validation error",
+            "model": ErrorResponse
+        }
+    },
+    summary="Search for similar vectors",
+    description="""
+    Search for similar vectors using semantic similarity.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Issue #22 - top_k Parameter:**
+    - Use `top_k` parameter to limit results (1-100, default: 10)
+    - Returns only the top K most similar vectors
+    - Results are sorted by similarity score (descending)
+    - If fewer vectors exist than top_k, all available vectors are returned
+
+    **Epic 5 Story 3 (Issue #17) - Namespace Scoping:**
+    - Only searches vectors in the specified namespace
+    - Vectors from other namespaces are NEVER returned
+    - Default namespace is used when namespace parameter is omitted
+
+    **Epic 5 Story 4 - Metadata Filtering:**
+    - Filter results by metadata fields
+    - Only returns vectors matching all specified metadata filters
+
+    **Epic 5 Story 5 - Similarity Threshold:**
+    - Use `similarity_threshold` to filter low-quality matches
+    - Only returns results with similarity >= threshold (0.0-1.0)
+
+    **Per PRD §6 (Agent Recall):**
+    - Enables agent memory retrieval
+    - Supports multi-agent isolation via namespaces
+
+    **Per PRD §10 (Predictable Replay):**
+    - Deterministic ordering ensures consistent results
+    - Same query produces same result ordering
+    """
+)
+async def search_vectors(
+    project_id: str = Path(..., description="Project ID"),
+    request: EmbeddingSearchRequest = ...,
+    current_user: str = Depends(get_current_user)
+) -> EmbeddingSearchResponse:
+    """
+    Search for similar vectors using semantic similarity.
+
+    Issue #22 Implementation:
+    - top_k parameter limits results to most similar vectors
+    - Results ordered by similarity score (descending)
+    - Handles edge cases (top_k > available vectors)
+
+    Issue #17 Implementation:
+    - Namespace parameter strictly scopes search results
+    - Only vectors from specified namespace are returned
+
+    Args:
+        project_id: Project identifier
+        request: Search request with query, namespace, top_k, filters
+        current_user: Authenticated user ID
+
+    Returns:
+        EmbeddingSearchResponse with matching vectors and metadata
+    """
+    start_time = time.time()
+
+    # Generate query embedding
+    query_embedding, model_used, dimensions, _ = embedding_service.generate_embedding(
+        text=request.query,
+        model=request.model
+    )
+
+    # Search vectors with namespace scoping (Issue #17) and top_k limiting (Issue #22)
+    namespace_used = request.namespace or DEFAULT_NAMESPACE
+
+    # Issue #26: Check if include_metadata and include_embeddings exist
+    include_metadata = getattr(request, 'include_metadata', True)
+    include_embeddings = getattr(request, 'include_embeddings', False)
+
+    search_results = vector_store_service.search_vectors(
+        project_id=project_id,
+        query_embedding=query_embedding,
+        namespace=namespace_used,
+        top_k=request.top_k,  # Issue #22: Limit results
+        similarity_threshold=request.similarity_threshold,
+        metadata_filter=request.metadata_filter,
+        user_id=None  # Allow cross-user search within project
+    )
+
+    # Convert to SearchResult objects
+    results = []
+    for result in search_results:
+        search_result = SearchResult(
+            vector_id=result["vector_id"],
+            namespace=result["namespace"],
+            text=result["text"],
+            similarity=result["similarity"],
+            model=result["model"],
+            dimensions=result["dimensions"],
+            metadata=result.get("metadata"),
+            embedding=result.get("embedding") if include_embeddings else None,
+            created_at=result["created_at"]
+        )
+        results.append(search_result)
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return EmbeddingSearchResponse(
+        results=results,
+        query=request.query,
+        namespace=namespace_used,  # Issue #17: Confirm namespace searched
+        model=model_used,
+        total_results=len(results),  # Issue #22: Total matches top_k limit
         processing_time_ms=processing_time
     )
 

@@ -12,7 +12,7 @@ Per DX Contract (PRD §10):
 - Project-level dimension configuration support
 """
 from typing import List, Optional, Tuple
-from app.core.exceptions import APIError
+from app.core.errors import APIError
 
 
 # Supported vector dimensions per Issue #28

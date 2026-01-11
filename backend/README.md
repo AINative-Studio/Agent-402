@@ -57,15 +57,24 @@ python -m app.main
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 4. Test the API
+### 4. Set Environment Variables
 
 ```bash
-# Using demo API key for user 1
-curl -X GET "http://localhost:8000/v1/public/projects" \
-  -H "X-API-Key: demo_key_user1_abc123"
+# Set standard environment variables
+export API_KEY="demo_key_user1_abc123"
+export PROJECT_ID="proj_demo_001"
+export BASE_URL="http://localhost:8000"
+```
 
-# Using demo API key for user 2
-curl -X GET "http://localhost:8000/v1/public/projects" \
+### 5. Test the API
+
+```bash
+# Using environment variables
+curl -X GET "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY"
+
+# Test with different user (user 2)
+curl -X GET "$BASE_URL/v1/public/projects" \
   -H "X-API-Key: demo_key_user2_xyz789"
 ```
 

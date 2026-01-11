@@ -289,6 +289,38 @@ class ImmutableRecordError(APIError):
         self.operation = operation
 
 
+class InvalidTimestampError(APIError):
+    """
+    Raised when timestamp format is invalid.
+
+    GitHub Issue #39: As a developer, invalid timestamps return clear errors.
+    Epic 8 Story 3: Invalid timestamps return clear errors.
+
+    Per DX Contract §7:
+    - Returns HTTP 422 (Unprocessable Entity)
+    - error_code: INVALID_TIMESTAMP
+    - detail: Message with expected format and examples
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: INVALID_TIMESTAMP
+        - detail: Message about invalid timestamp with examples
+    """
+
+    def __init__(self, detail: str = None):
+        if not detail:
+            detail = (
+                "Invalid timestamp format. Expected ISO8601 format (RFC 3339). "
+                "Valid examples: '2026-01-10T12:34:56Z', '2026-01-10T12:34:56.789Z', "
+                "'2026-01-10T12:34:56+00:00', '2026-01-10T12:34:56-05:00'"
+            )
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="INVALID_TIMESTAMP",
+            detail=detail
+        )
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

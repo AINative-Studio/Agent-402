@@ -146,12 +146,21 @@ Common validation errors:
 
 ## Examples
 
+### Environment Setup
+
+```bash
+# Set environment variables
+export API_KEY="your_api_key_here"
+export PROJECT_ID="proj_abc123"
+export BASE_URL="https://api.ainative.studio"
+```
+
 ### Example 1: Basic Usage (Single Document)
 
 **Request:**
 ```bash
-curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed-and-store" \
-  -H "X-API-Key: your_api_key_here" \
+curl -X POST "$BASE_URL/v1/public/$PROJECT_ID/embeddings/embed-and-store" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "documents": ["Autonomous fintech agent executing compliance check"]
@@ -181,8 +190,8 @@ curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed
 
 **Request:**
 ```bash
-curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed-and-store" \
-  -H "X-API-Key: your_api_key_here" \
+curl -X POST "$BASE_URL/v1/public/$PROJECT_ID/embeddings/embed-and-store" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "documents": [
@@ -232,8 +241,8 @@ curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed
 
 **Request:**
 ```bash
-curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed-and-store" \
-  -H "X-API-Key: your_api_key_here" \
+curl -X POST "$BASE_URL/v1/public/$PROJECT_ID/embeddings/embed-and-store" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "documents": ["High-quality embedding test"],
@@ -266,9 +275,10 @@ curl -X POST "https://api.ainative.studio/v1/public/proj_abc123/embeddings/embed
 import requests
 import os
 
-API_KEY = os.getenv('ZERODB_API_KEY')
-PROJECT_ID = os.getenv('ZERODB_PROJECT_ID')
-BASE_URL = "https://api.ainative.studio"
+# Use standard environment variables
+API_KEY = os.getenv('API_KEY', 'your_api_key_here')
+PROJECT_ID = os.getenv('PROJECT_ID', 'proj_abc123')
+BASE_URL = os.getenv('BASE_URL', 'https://api.ainative.studio')
 
 def embed_and_store_documents(documents, metadata=None, namespace="default", model=None):
     """
@@ -284,7 +294,7 @@ def embed_and_store_documents(documents, metadata=None, namespace="default", mod
         Response data with vector IDs and results
     """
     url = f"{BASE_URL}/v1/public/{PROJECT_ID}/embeddings/embed-and-store"
-    headers = {"X-API-Key": API_KEY}
+    headers = {"X-API-Key": API_KEY, "Content-Type": "application/json"}
 
     payload = {"documents": documents}
     if metadata:

@@ -28,7 +28,7 @@ GitHub Issue #31 Requirements (NEW):
 """
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
-from app.core.exceptions import APIError
+from app.core.errors import APIError
 
 
 # Supported vector dimensions per Issue #28
@@ -293,6 +293,11 @@ class VectorSearchRequest(BaseModel):
     Request schema for POST /v1/public/{project_id}/database/vectors/search.
 
     Direct vector search with strict dimension validation.
+
+    Issue #26 - Toggle metadata and embeddings in results:
+    - include_metadata: Control whether metadata is included in results (default: true)
+    - include_embeddings: Control whether embeddings are included in results (default: false)
+    - Optimizes response size based on use case
     """
     query_vector: List[float] = Field(
         ...,
@@ -325,9 +330,20 @@ class VectorSearchRequest(BaseModel):
         default=None,
         description="Optional metadata filters"
     )
+    include_metadata: bool = Field(
+        default=True,
+        description=(
+            "Whether to include metadata in response (Issue #26). "
+            "Default: true. Set to false to reduce response size when metadata is not needed."
+        )
+    )
     include_embeddings: bool = Field(
         default=False,
-        description="Whether to include embedding vectors in response"
+        description=(
+            "Whether to include embedding vectors in response (Issue #26). "
+            "Default: false. Set to true when embeddings are needed for further processing. "
+            "WARNING: Including embeddings significantly increases response size."
+        )
     )
 
     @validator('dimensions')
@@ -371,22 +387,32 @@ class VectorSearchRequest(BaseModel):
                 "metadata_filter": {
                     "agent_id": "compliance_agent"
                 },
+                "include_metadata": True,
                 "include_embeddings": False
             }
         }
 
 
 class VectorResult(BaseModel):
-    """Individual vector search result."""
+    """
+    Individual vector search result.
+
+    Issue #26 - Conditional field inclusion:
+    - metadata: Optional, only included if include_metadata=true
+    - embedding: Optional, only included if include_embeddings=true
+    """
     vector_id: str = Field(..., description="Unique identifier of the matched vector")
     namespace: str = Field(..., description="Namespace where vector was found")
     document: str = Field(..., description="Original document/text of the vector")
     similarity: float = Field(..., description="Similarity score (0.0-1.0)", ge=0.0, le=1.0)
     dimensions: int = Field(..., description="Dimensionality of the vector")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Vector metadata")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Vector metadata (only if include_metadata=true in request, Issue #26)"
+    )
     embedding: Optional[List[float]] = Field(
         default=None,
-        description="Embedding vector (only if include_embeddings=true)"
+        description="Embedding vector (only if include_embeddings=true in request, Issue #26)"
     )
     created_at: str = Field(..., description="ISO timestamp when vector was created")
 

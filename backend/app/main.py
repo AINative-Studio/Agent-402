@@ -26,9 +26,12 @@ from app.core.middleware import (
 )
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
-# Use embeddings API with Issue #16 implementation for batch embed-and-store
-from app.api.embeddings_issue16 import router as embeddings_router
+# Use full embeddings API with generate, embed-and-store, and search endpoints
+# Includes Issue #17 namespace scoping and Issue #23 search namespace parameter
+from app.api.embeddings import router as embeddings_router
 from app.api.vectors import router as vectors_router
+# Epic 8: Events API
+from app.api.events import router as events_router
 # Epic 12 Issue 3: Compliance events API
 from app.api.compliance_events import router as compliance_events_router
 # Epic 12 Issue 1: Agent profiles API
@@ -125,6 +128,7 @@ app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(embeddings_router)
 app.include_router(vectors_router)
+app.include_router(events_router)
 app.include_router(compliance_events_router)
 app.include_router(agents_router)
 app.include_router(agent_memory_router)

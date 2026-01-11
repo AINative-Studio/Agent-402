@@ -84,8 +84,13 @@ All API requests require authentication via the `X-API-Key` header.
 ### Request Format
 
 ```bash
-curl -X GET "https://api.ainative.studio/v1/public/projects" \
-  -H "X-API-Key: your_api_key_here" \
+# Set environment variables first
+export API_KEY="your_api_key_here"
+export BASE_URL="https://api.ainative.studio"
+
+# Make request using environment variables
+curl -X GET "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json"
 ```
 
@@ -211,8 +216,8 @@ Creates a new ZeroDB project.
 **Example Request:**
 
 ```bash
-curl -X POST "https://api.ainative.studio/v1/public/projects" \
-  -H "X-API-Key: your_api_key_here" \
+curl -X POST "$BASE_URL/v1/public/projects" \
+  -H "X-API-Key: $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Autonomous Fintech Agents",
@@ -298,15 +303,15 @@ Retrieves all projects for the authenticated user.
 **Example Request:**
 
 ```bash
-curl -X GET "https://api.ainative.studio/v1/public/projects?limit=10&offset=0" \
-  -H "X-API-Key: your_api_key_here"
+curl -X GET "$BASE_URL/v1/public/projects?limit=10&offset=0" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 **Example Request with Status Filter:**
 
 ```bash
-curl -X GET "https://api.ainative.studio/v1/public/projects?status=ACTIVE" \
-  -H "X-API-Key: your_api_key_here"
+curl -X GET "$BASE_URL/v1/public/projects?status=ACTIVE" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 ---
@@ -365,8 +370,8 @@ Retrieves details for a specific project.
 **Example Request:**
 
 ```bash
-curl -X GET "https://api.ainative.studio/v1/public/projects/proj_abc123xyz456" \
-  -H "X-API-Key: your_api_key_here"
+curl -X GET "$BASE_URL/v1/public/projects/$PROJECT_ID" \
+  -H "X-API-Key: $API_KEY"
 ```
 
 ---
@@ -470,6 +475,9 @@ zerodb_client.create_event({
 ## Related Documentation
 
 - [ZeroDB Developer Guide](/datamodel.md)
+- [Agent Lifecycle Events API](/docs/api/agent-lifecycle-events.md)
 - [DX Contract](/DX-Contract.md)
+- [PRD Section 5: Agent Personas](/prd.md#5-agent-personas-mvp)
 - [PRD Section 9: Deliverables](/prd.md#9-system-architecture-mvp)
 - [Backlog Epic 1: Public Projects API](/backlog.md#epic-1--public-projects-api-create--list)
+- [Backlog Epic 8: Events API](/backlog.md#epic-8--events-api)
