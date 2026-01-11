@@ -44,7 +44,7 @@ class TestProcessingTimeField:
         Issue #15: All embedding generation responses must include processing_time_ms field.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Test embedding generation with processing time",
@@ -71,7 +71,7 @@ class TestProcessingTimeField:
         Issue #15: Time should be in milliseconds (integer).
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Another test for integer validation",
@@ -102,7 +102,7 @@ class TestProcessingTimeField:
         Issue #15: Ensure time measurement is accurate.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Short text for embedding",
@@ -128,7 +128,7 @@ class TestProcessingTimeField:
         Epic 3, Story 5: Include processing_time_ms.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Test with default model"
@@ -157,7 +157,7 @@ class TestProcessingTimeField:
 
         for i in range(5):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={
                     "text": f"Test text variation {i} with different length to ensure timing varies",
@@ -313,7 +313,7 @@ class TestEndToEndTiming:
         request_start = time.time()
 
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Full lifecycle timing test with reasonable length text",
@@ -345,7 +345,7 @@ class TestEndToEndTiming:
         """
         # Request with invalid model
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Test",

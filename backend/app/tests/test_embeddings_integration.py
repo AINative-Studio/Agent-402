@@ -47,7 +47,7 @@ class TestEmbeddingsGenerateEndpoint:
         """
         # Make request
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Agent-native fintech workflow with compliance tracking",
@@ -91,7 +91,7 @@ class TestEmbeddingsGenerateEndpoint:
         Issue #15: Include processing_time_ms in response.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Test default model behavior"
@@ -119,7 +119,7 @@ class TestEmbeddingsGenerateEndpoint:
         Issue #15: All responses include processing_time_ms.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Testing with higher dimension model",
@@ -147,7 +147,7 @@ class TestEmbeddingsGenerateEndpoint:
         Issue #15: processing_time_ms only in successful responses.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Test with invalid model",
@@ -173,7 +173,7 @@ class TestEmbeddingsGenerateEndpoint:
         DX Contract §7: Validation errors use HTTP 422.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "",  # Empty text
@@ -194,7 +194,7 @@ class TestEmbeddingsGenerateEndpoint:
         Epic 2, Story 2: Invalid API keys return 401 INVALID_API_KEY.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             # No auth headers
             json={
                 "text": "Test without auth",
@@ -220,7 +220,7 @@ class TestProcessingTimeAccuracy:
         """
         # Short text
         response_short = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Short",
@@ -231,7 +231,7 @@ class TestProcessingTimeAccuracy:
         # Long text
         long_text = " ".join(["This is a much longer text with many words"] * 10)
         response_long = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": long_text,
@@ -267,7 +267,7 @@ class TestProcessingTimeAccuracy:
         times = []
         for _ in range(3):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={
                     "text": test_text,
@@ -305,7 +305,7 @@ class TestConcurrentRequests:
 
         def make_request(index):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={
                     "text": f"Concurrent request {index}",
@@ -340,7 +340,7 @@ class TestDeterministicDefaults:
         # Multiple requests without specifying model
         for _ in range(3):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={"text": "Test default model"}
             )
@@ -364,7 +364,7 @@ class TestDeterministicDefaults:
 
         for i in range(3):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={
                     "text": f"Consistency test {i}",
@@ -400,7 +400,7 @@ class TestObservabilityRequirements:
 
         for i in range(10):
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers,
                 json={
                     "text": f"Performance monitoring test request {i}",
@@ -440,7 +440,7 @@ class TestObservabilityRequirements:
         caplog.set_level(logging.INFO)
 
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers,
             json={
                 "text": "Audit trail test",

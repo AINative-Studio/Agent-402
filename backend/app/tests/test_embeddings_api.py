@@ -104,7 +104,7 @@ class TestEmbeddingsGenerate:
         Per Epic 3: Proper error handling for invalid input.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": ""},
             headers=auth_headers
         )
@@ -116,7 +116,7 @@ class TestEmbeddingsGenerate:
     def test_generate_embeddings_whitespace_only(self, client, auth_headers):
         """Test error handling for whitespace-only text."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "   "},
             headers=auth_headers
         )
@@ -130,7 +130,7 @@ class TestEmbeddingsGenerate:
         Epic 3 Story 4: Unsupported models return MODEL_NOT_FOUND.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={
                 "text": "Test text",
                 "model": "invalid-model-xyz"
@@ -149,7 +149,7 @@ class TestEmbeddingsGenerate:
     def test_generate_embeddings_missing_text(self, client, auth_headers):
         """Test error handling when text field is missing."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"model": "BAAI/bge-small-en-v1.5"},
             headers=auth_headers
         )
@@ -163,7 +163,7 @@ class TestEmbeddingsGenerate:
         Epic 2 Story 1: All public endpoints require X-API-Key.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test text"}
         )
 
@@ -180,7 +180,7 @@ class TestEmbeddingsGenerate:
         Epic 2 Story 2: Invalid API keys return 401 INVALID_API_KEY.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test text"},
             headers={"X-API-Key": "invalid_key_xyz"}
         )
@@ -192,7 +192,7 @@ class TestEmbeddingsGenerate:
         long_text = " ".join(["Autonomous agent workflow"] * 100)
 
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": long_text},
             headers=auth_headers
         )
@@ -208,7 +208,7 @@ class TestEmbeddingsGenerate:
         text_with_special_chars = "Agent: $10,000 transaction @fintech #compliance"
 
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": text_with_special_chars},
             headers=auth_headers
         )
@@ -223,7 +223,7 @@ class TestEmbeddingsGenerate:
         unicode_text = "Agent workflow 🤖 with émojis and spëcial çharacters"
 
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": unicode_text},
             headers=auth_headers
         )
@@ -240,12 +240,12 @@ class TestEmbeddingsGenerate:
 
         # Generate embedding twice
         response1 = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": text},
             headers=auth_headers
         )
         response2 = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": text},
             headers=auth_headers
         )
@@ -343,7 +343,7 @@ class TestEmbeddingDimensions:
         Epic 3 Story 3: Support multiple models with correct dimensions.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test text", "model": model},
             headers=auth_headers
         )
@@ -365,7 +365,7 @@ class TestErrorFormat:
         Per DX Contract §7: All errors return { detail, error_code }.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test"}
         )
 
@@ -380,7 +380,7 @@ class TestErrorFormat:
     def test_error_format_invalid_model(self, client, auth_headers):
         """Test error format for invalid model."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test", "model": "invalid"},
             headers=auth_headers
         )
@@ -403,7 +403,7 @@ class TestProcessingTime:
         Epic 3 Story 5: Responses include processing_time_ms.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test performance"},
             headers=auth_headers
         )

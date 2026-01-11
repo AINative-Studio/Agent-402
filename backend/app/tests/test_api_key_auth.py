@@ -47,7 +47,7 @@ class TestAPIKeyAuthRequirement:
     def test_embeddings_endpoint_requires_api_key(self, client):
         """Test that embeddings endpoint requires authentication."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"texts": ["test"], "model": "BAAI/bge-small-en-v1.5"}
         )
 
@@ -63,7 +63,7 @@ class TestAPIKeyAuthRequirement:
     def test_vectors_endpoint_requires_api_key(self, client):
         """Test that vectors endpoint requires authentication."""
         response = client.post(
-            "/v1/public/vectors/search",
+            "/v1/public/proj_demo_u1_001/database/vectors/search",
             json={
                 "query_vector": [0.1] * 384,
                 "limit": 10
@@ -142,7 +142,7 @@ class TestValidAPIKeyAcceptance:
     def test_valid_api_key_post_request(self, client, auth_headers_user1):
         """Test that valid API key works for POST requests."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "texts": ["test text"],

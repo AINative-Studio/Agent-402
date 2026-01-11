@@ -34,7 +34,7 @@ class TestModelValidation:
         Epic 3 Story 4 (Issue #14): Invalid/unsupported model values return 404.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding",
@@ -53,7 +53,7 @@ class TestModelValidation:
         DX Contract §7: All errors return { detail, error_code }.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding",
@@ -77,7 +77,7 @@ class TestModelValidation:
         DX Contract §7: All errors return { detail, error_code }.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding",
@@ -102,7 +102,7 @@ class TestModelValidation:
         Epic 3 Story 4 (Issue #14): Error message should list supported models.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding",
@@ -135,7 +135,7 @@ class TestModelValidation:
         """
         # Use the default model which is guaranteed to be supported
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding",
@@ -159,7 +159,7 @@ class TestModelValidation:
         DX Contract §3: Default embedding model is 384-dim.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text for embedding"
@@ -190,7 +190,7 @@ class TestModelValidation:
 
         for model in unsupported_models:
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers_user1,
                 json={
                     "text": "Test text",
@@ -218,7 +218,7 @@ class TestModelValidation:
         """
         # Try uppercase version of default model
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text",
@@ -237,7 +237,7 @@ class TestModelValidation:
         DX Contract §7: All errors return { detail, error_code }.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers=auth_headers_user1,
             json={
                 "text": "Test text",
@@ -294,7 +294,7 @@ class TestSupportedModels:
 
         for model_name in service.SUPPORTED_MODELS.keys():
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers=auth_headers_user1,
                 json={
                     "text": "Test text for embedding",

@@ -86,7 +86,7 @@ class TestEmbeddingGeneration:
         Issue #13: Default to 384-dim when model omitted.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Test compliance check for transaction TX-123"}
         )
@@ -112,7 +112,7 @@ class TestEmbeddingGeneration:
 
         for model_name, expected_dims in test_models:
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers={"X-API-Key": TEST_API_KEY},
                 json={
                     "text": f"Test text for model {model_name}",
@@ -135,7 +135,7 @@ class TestEmbeddingGeneration:
         """
         for model_name, spec in EMBEDDING_MODEL_SPECS.items():
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers={"X-API-Key": TEST_API_KEY},
                 json={
                     "text": f"Test embedding for {model_name}",
@@ -156,7 +156,7 @@ class TestEmbeddingGeneration:
         Epic 3 Story 4: Unsupported models return MODEL_NOT_FOUND.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={
                 "text": "Test text",
@@ -176,7 +176,7 @@ class TestEmbeddingGeneration:
         Epic 3 Story 5: Response includes processing_time_ms.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Metadata test"}
         )
@@ -213,7 +213,7 @@ class TestDimensionConsistency:
         dimensions_list = []
         for text in texts:
             response = client.post(
-                "/v1/public/embeddings/generate",
+                "/v1/public/proj_demo_u1_001/embeddings/generate",
                 headers={"X-API-Key": TEST_API_KEY},
                 json={"text": text, "model": model}
             )
@@ -235,13 +235,13 @@ class TestDimensionConsistency:
         model_768 = "sentence-transformers/all-mpnet-base-v2"
 
         response_384 = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Test", "model": model_384}
         )
 
         response_768 = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Test", "model": model_768}
         )
@@ -298,7 +298,7 @@ class TestAPISpecCompliance:
         """Test that embedding endpoints require authentication."""
         # Request without API key should fail
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             json={"text": "Test"}
         )
 
@@ -307,7 +307,7 @@ class TestAPISpecCompliance:
     def test_empty_text_rejected(self):
         """Test that empty text is rejected with validation error."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": ""}
         )
@@ -317,7 +317,7 @@ class TestAPISpecCompliance:
     def test_whitespace_only_text_rejected(self):
         """Test that whitespace-only text is rejected."""
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "   \n\t  "}
         )
@@ -334,7 +334,7 @@ class TestBackwardCompatibility:
         DX Contract §3: Default model behavior is guaranteed.
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Test without model parameter"}
         )
@@ -351,7 +351,7 @@ class TestBackwardCompatibility:
         Test that response format hasn't changed (backward compatibility).
         """
         response = client.post(
-            "/v1/public/embeddings/generate",
+            "/v1/public/proj_demo_u1_001/embeddings/generate",
             headers={"X-API-Key": TEST_API_KEY},
             json={"text": "Format test"}
         )
