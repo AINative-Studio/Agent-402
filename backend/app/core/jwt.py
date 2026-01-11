@@ -42,16 +42,16 @@ def create_access_token(user_id: str) -> tuple[str, int]:
         raise ValueError("user_id cannot be empty")
 
     # Calculate expiration time
-    now = datetime.utcnow()
-    expires_delta = timedelta(seconds=settings.jwt_expiration_seconds)
-    expire = now + expires_delta
+    # Use integer timestamps to avoid floating point comparison issues
+    now_timestamp = int(datetime.utcnow().timestamp())
+    expire_timestamp = now_timestamp + settings.jwt_expiration_seconds
 
     # Create token payload
     payload = {
         "sub": user_id,  # Subject claim
         "user_id": user_id,
-        "exp": int(expire.timestamp()),
-        "iat": int(now.timestamp()),
+        "exp": expire_timestamp,
+        "iat": now_timestamp,
         "token_type": "access"
     }
 
@@ -80,10 +80,12 @@ def decode_access_token(token: str) -> TokenPayload:
         InvalidJWTError: If token is invalid or malformed
     """
     try:
+        # Decode with 10-second leeway for clock skew
         payload = jwt.decode(
             token,
             settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm]
+            algorithms=[settings.jwt_algorithm],
+            leeway=10  # Allow 10 seconds clock skew
         )
 
         # Validate required claims

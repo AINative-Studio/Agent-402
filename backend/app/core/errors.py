@@ -158,6 +158,46 @@ class InvalidTierError(APIError):
         )
 
 
+class InvalidTokenError(APIError):
+    """
+    Raised when JWT token is invalid.
+
+    Epic 2 Story 4: JWT authentication support
+
+    Returns:
+        - HTTP 401 (Unauthorized)
+        - error_code: INVALID_TOKEN
+        - detail: Message about invalid token
+    """
+
+    def __init__(self, detail: str = "Invalid JWT token"):
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="INVALID_TOKEN",
+            detail=detail or "Invalid JWT token"
+        )
+
+
+class TokenExpiredAPIError(APIError):
+    """
+    Raised when JWT token has expired.
+
+    Epic 2 Story 4: JWT authentication support
+
+    Returns:
+        - HTTP 401 (Unauthorized)
+        - error_code: TOKEN_EXPIRED
+        - detail: Message about expired token
+    """
+
+    def __init__(self, detail: str = "JWT token has expired"):
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            error_code="TOKEN_EXPIRED",
+            detail=detail or "JWT token has expired"
+        )
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

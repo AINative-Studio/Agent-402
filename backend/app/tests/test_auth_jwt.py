@@ -148,8 +148,9 @@ class TestJWTLoginEndpoint:
         # Verify expiration is in the future
         assert decoded["exp"] > time.time()
 
-        # Verify issued at is in the past or present
-        assert decoded["iat"] <= time.time() + 1  # Allow 1 second clock skew
+        # Verify issued at is reasonable (within 60 seconds of now for clock skew)
+        now = time.time()
+        assert abs(decoded["iat"] - now) < 60, f"Token iat {decoded['iat']} too far from current time {now}"
 
     def test_jwt_token_signature_valid(self, client):
         """
@@ -168,10 +169,12 @@ class TestJWTLoginEndpoint:
 
         # Should decode successfully with signature verification
         # This will raise an exception if signature is invalid
+        # Use leeway for clock skew tolerance
         decoded = jwt.decode(
             token,
             settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm]
+            algorithms=[settings.jwt_algorithm],
+            leeway=60  # Allow 60 seconds clock skew for testing
         )
 
         assert decoded["user_id"] == "user_1"

@@ -24,6 +24,7 @@ from app.core.middleware import (
 )
 from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
+from app.api.embeddings import router as embeddings_router
 from app.middleware import APIKeyAuthMiddleware
 
 
@@ -98,6 +99,7 @@ async def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(projects_router)
+app.include_router(embeddings_router)
 
 
 # Root endpoint

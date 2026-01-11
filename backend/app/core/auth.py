@@ -1,11 +1,18 @@
 """
-Authentication and authorization using X-API-Key header.
-Per PRD §9 and Epic 2, all public endpoints require X-API-Key authentication.
+Authentication and authorization using X-API-Key header or JWT Bearer token.
+Per PRD §9 and Epic 2, all public endpoints require authentication.
+Epic 2 Story 4: Support both X-API-Key and JWT Bearer token authentication.
 """
 from typing import Optional
 from fastapi import Header, Depends
 from app.core.config import settings
-from app.core.errors import InvalidAPIKeyError
+from app.core.errors import InvalidAPIKeyError, InvalidTokenError, TokenExpiredAPIError
+from app.core.jwt import (
+    extract_token_from_header,
+    decode_access_token,
+    TokenExpiredError,
+    InvalidJWTError
+)
 
 
 async def verify_api_key(
@@ -64,9 +71,51 @@ async def verify_api_key(
 
 
 # Dependency for routes that require authentication
-async def get_current_user(user_id: str = Depends(verify_api_key)) -> str:
+async def get_current_user(
+    x_api_key: Optional[str] = Header(None),
+    authorization: Optional[str] = Header(None)
+) -> str:
     """
-    Get current authenticated user ID.
-    Use this as a dependency in route handlers.
+    Get current authenticated user ID from either X-API-Key or JWT Bearer token.
+
+    Per Epic 2 Story 4: Support both X-API-Key and Bearer JWT token authentication.
+
+    Args:
+        x_api_key: Optional X-API-Key header
+        authorization: Optional Authorization Bearer header
+
+    Returns:
+        str: Authenticated user ID
+
+    Raises:
+        InvalidAPIKeyError: If neither auth method provided or both invalid
     """
-    return user_id
+    # Try X-API-Key first (with all validation)
+    if x_api_key:
+        try:
+            return await verify_api_key(x_api_key)
+        except InvalidAPIKeyError:
+            # If API key is provided but invalid, and no JWT, raise error
+            if not authorization:
+                raise
+
+    # Try JWT Bearer token
+    if authorization:
+        token = extract_token_from_header(authorization)
+        if token:
+            try:
+                token_data = decode_access_token(token)
+                return token_data.user_id
+            except TokenExpiredError:
+                # Only raise TokenExpiredAPIError if no valid API key
+                if not x_api_key:
+                    raise TokenExpiredAPIError("JWT token has expired")
+            except InvalidJWTError as e:
+                # Only raise InvalidTokenError if no valid API key
+                if not x_api_key:
+                    raise InvalidTokenError(f"Invalid JWT token: {str(e)}")
+
+    # No valid authentication found
+    raise InvalidAPIKeyError(
+        "Authentication required. Provide X-API-Key or Authorization Bearer token."
+    )
