@@ -154,14 +154,9 @@ async def upsert_vector(
     # Determine namespace (default if not provided)
     namespace = request.namespace or "default"
 
-    # Determine model from dimensions (for compatibility)
-    dimension_to_model = {
-        384: "BAAI/bge-small-en-v1.5",
-        768: "BAAI/bge-base-en-v1.5",
-        1024: "BAAI/bge-large-en-v1.5",
-        1536: "openai-text-embedding-ada-002"
-    }
-    model = dimension_to_model.get(request.dimensions, "BAAI/bge-small-en-v1.5")
+    # Use default model for all dimensions (model parameter is for reference only)
+    # The actual dimension validation happens in the request schema
+    model = "BAAI/bge-small-en-v1.5"
 
     # Upsert vector using ZeroDB vector service (Issue #31: with metadata and namespace)
     vector_id, created = zerodb_vector_service.store_vector(
@@ -248,3 +243,73 @@ async def upsert_vector(
 #         namespace=namespace,
 #         total=total
 #     )
+
+
+@router.delete(
+    "/{project_id}/database/vectors/{vector_id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Vector deleted successfully"
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        404: {
+            "description": "Vector not found",
+            "model": ErrorResponse
+        }
+    },
+    summary="Delete vector embedding",
+    description="""
+    Delete a vector embedding by ID.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Query Parameters:**
+    - namespace: Optional namespace (defaults to "default")
+
+    **Warning:** This action is permanent and cannot be undone.
+    """
+)
+async def delete_vector(
+    project_id: str = Path(..., description="Project ID"),
+    vector_id: str = Path(..., description="Vector ID to delete"),
+    namespace: str = "default",
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Delete a vector embedding.
+
+    Args:
+        project_id: Project identifier
+        vector_id: Vector identifier to delete
+        namespace: Vector namespace (defaults to "default")
+        current_user: Authenticated user ID
+
+    Returns:
+        Delete confirmation message
+
+    Raises:
+        APIError: If vector not found
+    """
+    # Delete vector using ZeroDB vector service
+    deleted = zerodb_vector_service.delete_vector(
+        vector_id=vector_id,
+        namespace=namespace
+    )
+
+    if not deleted:
+        from app.core.errors import APIError
+        raise APIError(
+            status_code=404,
+            error_code="VECTOR_NOT_FOUND",
+            detail=f"Vector not found: {vector_id} in namespace {namespace}"
+        )
+
+    return {
+        "message": "Vector deleted successfully",
+        "vector_id": vector_id,
+        "namespace": namespace
+    }

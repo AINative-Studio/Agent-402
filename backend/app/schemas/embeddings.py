@@ -647,3 +647,128 @@ class EmbeddingSearchResponse(BaseModel):
                 "processing_time_ms": 15
             }
         }
+
+
+class EmbeddingCompareRequest(BaseModel):
+    """
+    Request schema for POST /v1/public/{project_id}/embeddings/compare.
+
+    Compare Embeddings Endpoint:
+    - Generates embeddings for two texts
+    - Calculates cosine similarity between them
+    - Returns both embeddings and similarity score
+    - Useful for semantic comparison and similarity analysis
+    """
+    text1: str = Field(
+        ...,
+        min_length=1,
+        description="First text to compare"
+    )
+    text2: str = Field(
+        ...,
+        min_length=1,
+        description="Second text to compare"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description=f"Embedding model to use. Defaults to '{DEFAULT_EMBEDDING_MODEL}' (384 dimensions)"
+    )
+
+    @validator('text1')
+    def text1_not_empty(cls, v):
+        """Ensure text1 is not just whitespace."""
+        if not v or not v.strip():
+            raise ValueError("text1 cannot be empty or whitespace")
+        return v.strip()
+
+    @validator('text2')
+    def text2_not_empty(cls, v):
+        """Ensure text2 is not just whitespace."""
+        if not v or not v.strip():
+            raise ValueError("text2 cannot be empty or whitespace")
+        return v.strip()
+
+    @validator('model')
+    def validate_model(cls, v):
+        """Validate that the specified model is supported."""
+        if v is None:
+            return DEFAULT_EMBEDDING_MODEL
+
+        if not is_model_supported(v):
+            supported = ", ".join(get_supported_models().keys())
+            raise ValueError(
+                f"Model '{v}' is not supported. "
+                f"Supported models: {supported}"
+            )
+
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text1": "Autonomous agent executing compliance check",
+                "text2": "AI system performing regulatory verification",
+                "model": "BAAI/bge-small-en-v1.5"
+            }
+        }
+
+
+class EmbeddingCompareResponse(BaseModel):
+    """
+    Response schema for POST /v1/public/{project_id}/embeddings/compare.
+
+    Compare Embeddings Response:
+    - Returns both embeddings for transparency
+    - Calculates and returns cosine similarity (0.0-1.0)
+    - Includes model and dimension information
+    - Provides processing time for observability
+    """
+    text1: str = Field(
+        ...,
+        description="First input text"
+    )
+    text2: str = Field(
+        ...,
+        description="Second input text"
+    )
+    embedding1: List[float] = Field(
+        ...,
+        description="Embedding vector for text1"
+    )
+    embedding2: List[float] = Field(
+        ...,
+        description="Embedding vector for text2"
+    )
+    cosine_similarity: float = Field(
+        ...,
+        description="Cosine similarity score between embeddings (0.0-1.0, where 1.0 is identical)",
+        ge=0.0,
+        le=1.0
+    )
+    model: str = Field(
+        ...,
+        description="Model used for embedding generation"
+    )
+    dimensions: int = Field(
+        ...,
+        description="Dimensionality of the embedding vectors"
+    )
+    processing_time_ms: int = Field(
+        ...,
+        description="Processing time in milliseconds",
+        ge=0
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text1": "Autonomous agent executing compliance check",
+                "text2": "AI system performing regulatory verification",
+                "embedding1": [0.123, -0.456, 0.789, "..."],
+                "embedding2": [0.115, -0.445, 0.798, "..."],
+                "cosine_similarity": 0.87,
+                "model": "BAAI/bge-small-en-v1.5",
+                "dimensions": 384,
+                "processing_time_ms": 92
+            }
+        }

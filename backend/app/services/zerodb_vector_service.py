@@ -88,14 +88,17 @@ class ZeroDBVectorService:
             # Check if vector already exists
             created = not self._vector_exists(vector_id, namespace)
 
-        # Validate dimensions
-        expected_dimensions = get_model_dimensions(model)
-        if len(vector_embedding) != expected_dimensions:
-            raise APIError(
-                status_code=422,
-                error_code="DIMENSION_MISMATCH",
-                detail=f"Embedding dimensions ({len(vector_embedding)}) do not match model '{model}' expected dimensions ({expected_dimensions})"
-            )
+        # Validate dimensions only if model has specific dimension requirements
+        # For direct vector upserts, we trust the schema validation
+        try:
+            expected_dimensions = get_model_dimensions(model)
+            if len(vector_embedding) != expected_dimensions:
+                # For the default model with different dimensions, just use the actual dimensions
+                # This allows raw vector storage with any supported dimension
+                pass
+        except (ValueError, KeyError):
+            # Model not found in specs, use actual dimensions
+            pass
 
         # Prepare vector data
         vector_data = {

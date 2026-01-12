@@ -58,12 +58,55 @@ class AgentCreateRequest(BaseModel):
         }
 
 
+class UpdateAgentRequest(BaseModel):
+    """
+    Request schema for PATCH /v1/public/{project_id}/agents/{agent_id}.
+    Updates an existing agent profile. All fields are optional.
+    """
+    role: Optional[str] = Field(
+        None,
+        description="Agent role (e.g., researcher, analyst, executor)",
+        min_length=1,
+        max_length=100,
+        examples=["analyst"]
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Human-readable agent name",
+        min_length=1,
+        max_length=200,
+        examples=["Updated Agent Name"]
+    )
+    description: Optional[str] = Field(
+        None,
+        description="Agent description and purpose",
+        max_length=1000,
+        examples=["Updated agent description"]
+    )
+    scope: Optional[AgentScope] = Field(
+        None,
+        description="Operational scope of the agent"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "role": "analyst",
+                "name": "Updated Research Agent",
+                "description": "Updated agent description",
+                "scope": "GLOBAL"
+            }
+        }
+
+
 class AgentResponse(BaseModel):
     """
     Response schema for agent operations.
     Returns full agent profile with all fields.
+    Note: agent_id is the primary field, id kept for backward compatibility.
     """
-    id: str = Field(..., description="Unique agent identifier")
+    id: str = Field(..., description="Unique agent identifier (deprecated, use agent_id)")
+    agent_id: str = Field(..., description="Unique agent identifier (primary field)")
     did: str = Field(..., description="Decentralized Identifier for the agent")
     role: str = Field(..., description="Agent role")
     name: str = Field(..., description="Human-readable agent name")
@@ -78,6 +121,7 @@ class AgentResponse(BaseModel):
         json_schema_extra = {
             "example": {
                 "id": "agent_abc123",
+                "agent_id": "agent_abc123",
                 "did": "did:web:agent.example.com:researcher-01",
                 "role": "researcher",
                 "name": "Research Agent Alpha",

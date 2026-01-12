@@ -6,10 +6,15 @@ Endpoints:
 - POST /v1/public/{project_id}/embeddings/generate (Epic 3, Issue #12)
 - POST /v1/public/{project_id}/embeddings/embed-and-store (Epic 4, Issue #17, #18, #19)
 - POST /v1/public/{project_id}/embeddings/search (Epic 5, Issue #21, #22, #17)
+- POST /v1/public/{project_id}/embeddings/compare (Compare two texts)
 
 Issue #21 - Search Endpoint:
 - Request: query, model, namespace, top_k, similarity_threshold, metadata_filter, include_metadata, include_embeddings
 - Response: results (id, score, document, metadata, embedding), model, namespace, processing_time_ms
+
+Compare Endpoint:
+- Request: text1, text2, model (optional)
+- Response: text1, text2, embedding1, embedding2, cosine_similarity, model, dimensions, processing_time_ms
 """
 import time
 from fastapi import APIRouter, Depends, status, Path, HTTPException
@@ -21,6 +26,8 @@ from app.schemas.embeddings import (
     EmbedAndStoreResponse,
     EmbeddingSearchRequest,
     EmbeddingSearchResponse,
+    EmbeddingCompareRequest,
+    EmbeddingCompareResponse,
     SearchResult,
     ModelInfo,
     DEFAULT_EMBEDDING_MODEL,
@@ -393,14 +400,14 @@ async def list_models() -> list[ModelInfo]:
         List of ModelInfo objects describing available models
     """
     from app.core.embedding_models import EMBEDDING_MODEL_SPECS
-    
+
     models = []
     default_model_str = DEFAULT_EMBEDDING_MODEL
-    
+
     for model_enum, spec in EMBEDDING_MODEL_SPECS.items():
         model_name = model_enum.value if hasattr(model_enum, 'value') else str(model_enum)
         is_default = (model_name == default_model_str)
-        
+
         models.append(ModelInfo(
             name=model_name,
             dimensions=spec["dimensions"],
@@ -409,3 +416,122 @@ async def list_models() -> list[ModelInfo]:
         ))
 
     return models
+
+
+@router.post(
+    "/{project_id}/embeddings/compare",
+    response_model=EmbeddingCompareResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Successfully compared embeddings",
+            "model": EmbeddingCompareResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        422: {
+            "description": "Validation error",
+            "model": ErrorResponse
+        }
+    },
+    summary="Compare two texts using embeddings",
+    description="""
+    Generate embeddings for two texts and calculate their cosine similarity.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Use Cases:**
+    - Semantic similarity comparison
+    - Duplicate detection
+    - Content matching
+    - Query-document relevance scoring
+
+    **Cosine Similarity Range:**
+    - 1.0: Texts are semantically identical
+    - 0.5-0.9: Texts are similar
+    - 0.0-0.5: Texts are different
+    - 0.0: Texts are completely unrelated
+
+    **Model Support:**
+    - BAAI/bge-small-en-v1.5: 384 dimensions (default)
+    - BAAI/bge-base-en-v1.5: 768 dimensions
+    - BAAI/bge-large-en-v1.5: 1024 dimensions
+    - sentence-transformers/all-mpnet-base-v2: 768 dimensions
+
+    **Performance:**
+    - Returns both embeddings for transparency
+    - Processing time included for observability
+    - Deterministic results for same inputs
+    """
+)
+async def compare_embeddings(
+    project_id: str = Path(..., description="Project ID"),
+    request: EmbeddingCompareRequest = ...,
+    current_user: str = Depends(get_current_user)
+) -> EmbeddingCompareResponse:
+    """
+    Compare two texts by generating embeddings and calculating cosine similarity.
+
+    This endpoint generates embeddings for both input texts using the specified
+    model (or default if not specified), then calculates the cosine similarity
+    between the two embeddings. Higher similarity scores indicate more semantic
+    similarity between the texts.
+
+    Args:
+        project_id: Project identifier
+        request: Compare request with text1, text2, and optional model
+        current_user: Authenticated user ID
+
+    Returns:
+        EmbeddingCompareResponse with embeddings and similarity score
+
+    Raises:
+        APIError: If model is not supported or embedding generation fails
+    """
+    from app.core.math_utils import cosine_similarity
+
+    start_time = time.time()
+
+    # Generate embedding for first text
+    embedding1, model_used, dimensions, _ = await embedding_service.generate_embedding(
+        text=request.text1,
+        model=request.model
+    )
+
+    # Generate embedding for second text (using same model)
+    embedding2, _, _, _ = await embedding_service.generate_embedding(
+        text=request.text2,
+        model=model_used  # Use same model as first text
+    )
+
+    # Calculate cosine similarity between embeddings
+    try:
+        similarity = cosine_similarity(embedding1, embedding2)
+    except ValueError as e:
+        # This should never happen since both embeddings use same model/dimensions
+        # but handle gracefully just in case
+        raise APIError(
+            status_code=500,
+            error_code="SIMILARITY_CALCULATION_ERROR",
+            detail=f"Failed to calculate similarity: {str(e)}"
+        )
+
+    # Ensure similarity is in [0, 1] range for embeddings
+    # (cosine similarity can theoretically be negative, but embeddings are typically positive)
+    # Clamp to ensure response validation passes
+    similarity = max(0.0, min(1.0, similarity))
+
+    processing_time = int((time.time() - start_time) * 1000)
+
+    return EmbeddingCompareResponse(
+        text1=request.text1,
+        text2=request.text2,
+        embedding1=embedding1,
+        embedding2=embedding2,
+        cosine_similarity=similarity,
+        model=model_used,
+        dimensions=dimensions,
+        processing_time_ms=processing_time
+    )

@@ -51,19 +51,23 @@ def _row_to_agent(row_data: dict) -> Agent:
     elif updated_at is None:
         updated_at = datetime.now(timezone.utc)
 
-    # Parse scope enum
-    scope_value = data.get("scope", "PROJECT")
+    # Parse scope enum from config or direct field
+    config = data.get("config", {})
+    scope_value = config.get("scope", data.get("scope", "PROJECT"))
     try:
         scope = AgentScope(scope_value)
     except ValueError:
         scope = AgentScope.PROJECT
+
+    # Get description from config or direct field
+    description = config.get("description", data.get("description"))
 
     return Agent(
         id=data.get("agent_id", data.get("id", "")),
         did=data.get("did", ""),
         role=data.get("role", ""),
         name=data.get("name", ""),
-        description=data.get("description"),
+        description=description,
         scope=scope,
         project_id=data.get("project_id", ""),
         created_at=created_at,

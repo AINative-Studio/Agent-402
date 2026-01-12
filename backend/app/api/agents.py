@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, status
 from app.core.auth import get_current_user
 from app.schemas.agents import (
     AgentCreateRequest,
+    UpdateAgentRequest,
     AgentResponse,
     AgentListResponse,
     ErrorResponse
@@ -118,6 +119,7 @@ async def create_agent(
 
     return AgentResponse(
         id=agent.id,
+        agent_id=agent.id,
         did=agent.did,
         role=agent.role,
         name=agent.name,
@@ -188,6 +190,7 @@ async def list_agents(
     agent_responses: List[AgentResponse] = [
         AgentResponse(
             id=agent.id,
+            agent_id=agent.id,
             did=agent.did,
             role=agent.role,
             name=agent.name,
@@ -264,6 +267,7 @@ async def get_agent(
 
     return AgentResponse(
         id=agent.id,
+        agent_id=agent.id,
         did=agent.did,
         role=agent.role,
         name=agent.name,
@@ -273,3 +277,143 @@ async def get_agent(
         created_at=agent.created_at,
         updated_at=agent.updated_at
     )
+
+
+@router.patch(
+    "/{project_id}/agents/{agent_id}",
+    response_model=AgentResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Agent updated successfully",
+            "model": AgentResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        403: {
+            "description": "Not authorized to access project",
+            "model": ErrorResponse
+        },
+        404: {
+            "description": "Project or agent not found",
+            "model": ErrorResponse
+        }
+    },
+    summary="Update agent profile",
+    description="""
+    Update an existing agent profile within a project.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Updatable fields:**
+    - role: Agent role (optional)
+    - name: Human-readable agent name (optional)
+    - description: Agent description and purpose (optional)
+    - scope: Operational scope (optional)
+
+    **Note:** DID cannot be updated after creation.
+    All fields are optional - only provide fields you want to update.
+    """
+)
+async def update_agent(
+    project_id: str,
+    agent_id: str,
+    request: UpdateAgentRequest,
+    current_user: str = Depends(get_current_user)
+) -> AgentResponse:
+    """
+    Update an existing agent profile.
+
+    Args:
+        project_id: Project identifier from URL
+        agent_id: Agent identifier from URL
+        request: Agent update request body
+        current_user: User ID from X-API-Key authentication
+
+    Returns:
+        AgentResponse with updated agent details
+    """
+    # Validate project access
+    validate_project_access(project_id, current_user)
+
+    # Update agent
+    agent = await agent_service.update_agent(
+        agent_id=agent_id,
+        project_id=project_id,
+        name=request.name,
+        role=request.role,
+        description=request.description,
+        scope=request.scope
+    )
+
+    return AgentResponse(
+        id=agent.id,
+        agent_id=agent.id,
+        did=agent.did,
+        role=agent.role,
+        name=agent.name,
+        description=agent.description,
+        scope=agent.scope,
+        project_id=agent.project_id,
+        created_at=agent.created_at,
+        updated_at=agent.updated_at
+    )
+
+
+@router.delete(
+    "/{project_id}/agents/{agent_id}",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Agent deleted successfully"
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        403: {
+            "description": "Not authorized to access project",
+            "model": ErrorResponse
+        },
+        404: {
+            "description": "Project or agent not found",
+            "model": ErrorResponse
+        }
+    },
+    summary="Delete agent profile",
+    description="""
+    Delete an agent profile from a project.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Warning:** This action is permanent and cannot be undone.
+    """
+)
+async def delete_agent(
+    project_id: str,
+    agent_id: str,
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Delete an agent profile from a project.
+
+    Args:
+        project_id: Project identifier from URL
+        agent_id: Agent identifier from URL
+        current_user: User ID from X-API-Key authentication
+
+    Returns:
+        Success confirmation message
+    """
+    # Validate project access
+    validate_project_access(project_id, current_user)
+
+    # Delete agent
+    await agent_service.delete_agent(agent_id, project_id)
+
+    return {
+        "message": "Agent deleted successfully",
+        "agent_id": agent_id
+    }

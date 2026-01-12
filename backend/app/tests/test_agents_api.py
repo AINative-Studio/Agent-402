@@ -707,9 +707,9 @@ class TestGetSingleAgentEndpoint:
 
         data = response.json()
 
-        # Verify all required fields
+        # Verify all required fields (including agent_id for frontend integration)
         required_fields = {
-            "id", "did", "role", "name", "description",
+            "id", "agent_id", "did", "role", "name", "description",
             "scope", "project_id", "created_at", "updated_at"
         }
         assert set(data.keys()) == required_fields
