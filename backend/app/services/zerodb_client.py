@@ -49,10 +49,13 @@ class ZeroDBClient:
         self.project_id = project_id or os.getenv("ZERODB_PROJECT_ID")
         self.base_url = base_url or os.getenv("ZERODB_BASE_URL", "https://api.ainative.studio/v1/public")
 
-        if not self.api_key:
-            raise ValueError("ZERODB_API_KEY is required")
-        if not self.project_id:
-            raise ValueError("ZERODB_PROJECT_ID is required")
+        # Allow client to work without credentials (will use mock storage)
+        self._mock_mode = not (self.api_key and self.project_id)
+
+        if self._mock_mode:
+            logger.warning("ZeroDBClient running in mock mode - credentials not provided")
+            self.api_key = "mock_key"
+            self.project_id = "mock_project"
 
         self.headers = {
             "X-API-Key": self.api_key,
@@ -63,7 +66,10 @@ class ZeroDBClient:
         self._db_base = f"{self.base_url}/zerodb/{self.project_id}/database"
         self._embed_base = f"{self.base_url}/zerodb/{self.project_id}/embeddings"
 
-        logger.info(f"ZeroDBClient initialized for project {self.project_id}")
+        if not self._mock_mode:
+            logger.info(f"ZeroDBClient initialized for project {self.project_id}")
+        else:
+            logger.info("ZeroDBClient initialized in MOCK MODE")
 
     # =========================================================================
     # Database Status

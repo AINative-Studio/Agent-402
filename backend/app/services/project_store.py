@@ -24,14 +24,26 @@ class ProjectStore:
         Creates predefined projects for demo API key users.
         """
         demo_projects = [
-            # User 1 projects
+            # User 1 projects - Real ZeroDB project
             Project(
-                id="proj_demo_u1_001",
+                id="9229ed97-98f1-4fc4-a055-0b8768c79f05",
                 name="Agent Finance Demo",
                 status=ProjectStatus.ACTIVE,
                 tier=ProjectTier.FREE,
                 user_id="user_1",
-                description="Demo project for autonomous fintech agents",
+                description="Demo project for autonomous fintech agents with ZeroDB backend",
+                database_enabled=True,
+                created_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+            ),
+            # Legacy demo project (for backward compatibility)
+            Project(
+                id="proj_demo_u1_001",
+                name="Agent Finance Demo (Legacy)",
+                status=ProjectStatus.ACTIVE,
+                tier=ProjectTier.FREE,
+                user_id="user_1",
+                description="Legacy demo project for autonomous fintech agents",
                 database_enabled=True,
                 created_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),

@@ -232,7 +232,7 @@ async def list_tables(
     validate_project_access(project_id, current_user)
 
     # Get tables for project
-    tables = table_service.list_project_tables(project_id)
+    tables = await table_service.list_project_tables(project_id)
 
     # Convert to response models
     table_responses: List[TableResponse] = [
