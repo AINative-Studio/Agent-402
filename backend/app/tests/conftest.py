@@ -106,6 +106,26 @@ def override_zerodb_client(monkeypatch, mock_zerodb_client):
         "app.services.event_service.get_zerodb_client",
         lambda: mock_zerodb_client
     )
+    monkeypatch.setattr(
+        "app.services.embed_store_service.get_zerodb_client",
+        lambda: mock_zerodb_client
+    )
+    monkeypatch.setattr(
+        "app.services.embedding_service.get_zerodb_client",
+        lambda: mock_zerodb_client
+    )
+    monkeypatch.setattr(
+        "app.services.row_service.get_zerodb_client",
+        lambda: mock_zerodb_client
+    )
+    monkeypatch.setattr(
+        "app.services.table_service.get_zerodb_client",
+        lambda: mock_zerodb_client
+    )
+    monkeypatch.setattr(
+        "app.services.vector_store_service.get_zerodb_client",
+        lambda: mock_zerodb_client
+    )
 
     return mock_zerodb_client
 
