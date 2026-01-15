@@ -203,7 +203,7 @@ async def embed_and_store(
     """
     # Call embedding service with namespace support (Issue #17) and upsert logic (Issue #19)
     vectors_stored, vector_id, model_used, dimensions, created, processing_time, stored_at = (
-        embedding_service.embed_and_store(
+        await embedding_service.embed_and_store(
             text=request.text,
             model=request.model,
             namespace=request.namespace,  # Issue #17: Pass namespace for isolation

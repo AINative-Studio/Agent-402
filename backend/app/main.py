@@ -221,7 +221,7 @@ async def health_check():
 app.include_router(auth_router)
 app.include_router(projects_router)
 # Epic 4 Issue 16: Include embed-store router first (texts field version takes precedence)
-app.include_router(embed_store_router)
+# app.include_router(embed_store_router)  # Issue #79: Commented out - conflicts with embeddings_router
 app.include_router(embeddings_router)
 app.include_router(vectors_router)
 app.include_router(events_router)
