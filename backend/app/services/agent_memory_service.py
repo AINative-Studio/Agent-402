@@ -111,6 +111,7 @@ class AgentMemoryService:
             "agent_id": agent_id,
             "memory_type": memory_type,
             "content": content,
+            "namespace": namespace,
             "metadata": metadata or {},
             "created_at": timestamp,
             "updated_at": timestamp
@@ -199,7 +200,7 @@ class AgentMemoryService:
         Args:
             project_id: Project identifier
             memory_id: Memory entry identifier
-            namespace: Optional namespace filter (not used in DB query, kept for interface)
+            namespace: Optional namespace filter for isolation
 
         Returns:
             Memory record dictionary or None if not found
@@ -210,6 +211,10 @@ class AgentMemoryService:
                 "memory_id": {"$eq": memory_id},
                 "project_id": {"$eq": project_id}
             }
+
+            # Add namespace filter if provided
+            if namespace:
+                filter_query["namespace"] = {"$eq": namespace}
 
             result = await self.client.query_rows(TABLE_NAME, filter_query, limit=1)
 
@@ -277,6 +282,10 @@ class AgentMemoryService:
         if memory_type:
             filter_query["memory_type"] = {"$eq": memory_type}
             filters_applied["memory_type"] = memory_type
+
+        if namespace:
+            filter_query["namespace"] = {"$eq": namespace}
+            filters_applied["namespace"] = namespace
 
         try:
             # Query rows with filter
@@ -499,7 +508,7 @@ class AgentMemoryService:
 
         Args:
             row: Database row dictionary
-            namespace: Optional namespace to include
+            namespace: Optional namespace to override (not used, kept for interface)
 
         Returns:
             Memory record dictionary
@@ -511,7 +520,7 @@ class AgentMemoryService:
             "memory_type": row.get("memory_type"),
             "content": row.get("content"),
             "metadata": row.get("metadata", {}),
-            "namespace": namespace or "default",
+            "namespace": row.get("namespace", "default"),
             "timestamp": row.get("created_at"),
             "project_id": row.get("project_id"),
             "embedding_id": row.get("embedding_id")
