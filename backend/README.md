@@ -102,6 +102,13 @@ pytest -m integration
 pytest -m unit
 ```
 
+## Error Documentation
+
+For detailed error troubleshooting and complete error code reference:
+
+- [Error Troubleshooting Guide](docs/ERROR_TROUBLESHOOTING.md) - Top 10 common errors with fixes
+- [Complete Error Codes Reference](docs/ERROR_CODES.md) - All error codes with examples
+
 ## Demo API Keys
 
 For deterministic demo per PRD §9:
