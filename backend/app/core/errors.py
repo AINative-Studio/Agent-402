@@ -719,6 +719,37 @@ class VectorNotFoundError(APIError):
         self.namespace = namespace
 
 
+class RunNotFoundError(APIError):
+    """
+    Raised when a run is not found.
+
+    Epic 9 Issue #43: Distinguish path vs resource 404 errors.
+    Epic 12 Issue 5: Agent run replay from ZeroDB records.
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: RUN_NOT_FOUND
+        - detail: Message including run ID and project ID
+    """
+
+    def __init__(self, run_id: str, project_id: str):
+        """
+        Initialize RunNotFoundError.
+
+        Args:
+            run_id: ID of the run that wasn't found
+            project_id: Project ID where the run was searched
+        """
+        detail = f"Run not found: {run_id} in project {project_id}"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="RUN_NOT_FOUND",
+            detail=detail
+        )
+        self.run_id = run_id
+        self.project_id = project_id
+
+
 class ZeroDBError(APIError):
     """
     Raised when ZeroDB API calls fail.

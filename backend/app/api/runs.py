@@ -22,7 +22,7 @@ All data is ordered chronologically by timestamp for deterministic replay.
 from typing import Optional
 from fastapi import APIRouter, Depends, status, Path, Query, HTTPException
 from app.core.auth import get_current_user
-from app.core.errors import APIError
+from app.core.errors import RunNotFoundError
 from app.schemas.runs import (
     RunStatus,
     RunListResponse,
@@ -38,25 +38,6 @@ router = APIRouter(
     prefix="/v1/public",
     tags=["runs"]
 )
-
-
-class RunNotFoundError(APIError):
-    """
-    Raised when a run is not found.
-
-    Returns:
-        - HTTP 404 (Not Found)
-        - error_code: RUN_NOT_FOUND
-        - detail: Message including run ID
-    """
-
-    def __init__(self, run_id: str, project_id: str):
-        detail = f"Run not found: {run_id} in project {project_id}"
-        super().__init__(
-            status_code=status.HTTP_404_NOT_FOUND,
-            error_code="RUN_NOT_FOUND",
-            detail=detail
-        )
 
 
 @router.get(
