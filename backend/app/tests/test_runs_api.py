@@ -36,7 +36,7 @@ class TestListRunsEndpoint:
         Test successful retrieval of runs list.
         Verifies pagination and run summary structure.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         response = client.get(
             f"/v1/public/{project_id}/runs",
@@ -88,7 +88,7 @@ class TestListRunsEndpoint:
         """
         Test pagination parameters work correctly.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Test custom page size
         response = client.get(
@@ -107,7 +107,7 @@ class TestListRunsEndpoint:
         """
         Test filtering runs by status.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Filter by COMPLETED status
         response = client.get(
@@ -143,7 +143,7 @@ class TestListRunsEndpoint:
         """
         Test that list runs requires API key authentication.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Request without authentication
         response = client.get(f"/v1/public/{project_id}/runs")
@@ -158,7 +158,7 @@ class TestListRunsEndpoint:
         """
         Test that page parameter must be >= 1.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Invalid page number
         response = client.get(
@@ -172,7 +172,7 @@ class TestListRunsEndpoint:
         """
         Test that page_size parameter must be between 1 and 100.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Page size too large
         response = client.get(
@@ -202,7 +202,7 @@ class TestGetRunDetailEndpoint:
         Test successful retrieval of run details.
         Verifies all required fields and agent profile inclusion.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -252,7 +252,7 @@ class TestGetRunDetailEndpoint:
         """
         Test that requesting non-existent run returns 404.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_nonexistent_999"
 
         response = client.get(
@@ -291,7 +291,7 @@ class TestGetRunDetailEndpoint:
         """
         Test that get run detail requires API key authentication.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         # Request without authentication
@@ -315,7 +315,7 @@ class TestGetRunReplayEndpoint:
         Test successful retrieval of complete replay data.
         Verifies all required components: profile, memory, events, requests.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -372,7 +372,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that agent_memory records have correct structure and content.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -409,7 +409,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that compliance_events have correct structure and content.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -447,7 +447,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that x402_requests have correct structure and content.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -485,7 +485,7 @@ class TestGetRunReplayEndpoint:
         Test that agent_memory records are in chronological order.
         Per PRD Section 11: All records ordered chronologically by timestamp.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -510,7 +510,7 @@ class TestGetRunReplayEndpoint:
         Test that compliance_events are in chronological order.
         Per PRD Section 11: All records ordered chronologically by timestamp.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -535,7 +535,7 @@ class TestGetRunReplayEndpoint:
         Test that x402_requests are in chronological order.
         Per PRD Section 11: All records ordered chronologically by timestamp.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -560,7 +560,7 @@ class TestGetRunReplayEndpoint:
         Test that validation results are included and correct.
         Per PRD Section 11: Validate all linked records exist.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -595,7 +595,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that requesting replay for non-existent run returns 404.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_nonexistent_999"
 
         response = client.get(
@@ -616,7 +616,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that get replay data requires API key authentication.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         # Request without authentication
@@ -632,7 +632,7 @@ class TestGetRunReplayEndpoint:
         """
         Test that all timestamps are in ISO 8601 format.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -685,7 +685,7 @@ class TestReplayDataCompleteness:
         Test that replay data includes all required components.
         Per PRD Section 11: agent_profile, agent_memory, compliance_events, x402_requests.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -717,7 +717,7 @@ class TestReplayDataCompleteness:
         """
         Test that metadata is preserved in all record types.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -747,7 +747,7 @@ class TestReplayDataCompleteness:
         """
         Test that X402 request/response payloads are preserved.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         response = client.get(
@@ -772,7 +772,7 @@ class TestReplayDataCompleteness:
         Test that replay data is deterministic - same request returns same data.
         (Except for replay_generated_at which may differ)
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
         run_id = "run_demo_001"
 
         # Make first request
@@ -835,7 +835,7 @@ class TestErrorHandling:
         """
         Test handling of various run_id formats.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Various invalid run IDs should return 404
         invalid_run_ids = [
@@ -859,7 +859,7 @@ class TestErrorHandling:
         """
         Test that missing X-API-Key header returns 401.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # List runs without auth
         response = client.get(f"/v1/public/{project_id}/runs")
@@ -877,7 +877,7 @@ class TestErrorHandling:
         """
         Test that invalid API key returns 401.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         response = client.get(
             f"/v1/public/{project_id}/runs",
@@ -901,7 +901,7 @@ class TestEndToEndReplayScenario:
         Test complete workflow: list runs -> get details -> get replay data.
         Simulates real user workflow for replaying agent run.
         """
-        project_id = "proj_demo_001"
+        project_id = "proj_demo_u1_001"
 
         # Step 1: List all runs for project
         list_response = client.get(
