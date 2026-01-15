@@ -753,7 +753,7 @@ class TestDimensionConsistencyIntegration:
 class TestDimensionSpecificationCompliance:
     """Test compliance with dimension specifications from embedding models."""
 
-    def test_all_models_match_specification(self):
+    async def test_all_models_match_specification(self):
         """
         Test that all models generate dimensions matching their specifications.
 
@@ -765,7 +765,7 @@ class TestDimensionSpecificationCompliance:
             spec_dims = spec["dimensions"]
 
             # Generate embedding
-            embedding, model_used, actual_dims, _ = embedding_service.generate_embedding(
+            embedding, model_used, actual_dims, _ = await embedding_service.generate_embedding(
                 text=f"Test spec compliance for {model_name}",
                 model=model_name
             )
