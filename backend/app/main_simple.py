@@ -136,6 +136,111 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
+# X402 Protocol Discovery Endpoint - Issue #73
+@app.get(
+    "/.well-known/x402",
+    tags=["x402"],
+    summary="X402 Protocol Discovery",
+    status_code=status.HTTP_200_OK
+)
+async def x402_discovery():
+    """X402 Protocol Discovery Endpoint."""
+    return {
+        "version": "1.0",
+        "endpoint": "/x402",
+        "supported_dids": ["did:ethr"],
+        "signature_methods": ["ECDSA"],
+        "server_info": {
+            "name": "ZeroDB Agent Finance API",
+            "description": "Autonomous Fintech Agent Crew - AINative Edition"
+        }
+    }
+
+
+# X402 Protocol Signed POST Endpoint - Issue #77
+@app.post(
+    "/x402",
+    tags=["x402"],
+    summary="X402 Protocol Signed POST Endpoint",
+    status_code=status.HTTP_200_OK
+)
+async def x402_signed_request(request: Request):
+    """
+    X402 Protocol Signed POST Endpoint.
+
+    Public endpoint that accepts signed X402 protocol requests.
+    Verifies DID-based signatures and logs requests for audit.
+    """
+    from datetime import datetime
+    from app.schemas.x402_protocol import X402ProtocolRequest, X402ProtocolResponse
+    from app.core.did_signer import DIDSigner, InvalidDIDError
+    from app.services.x402_service import x402_service
+
+    # Parse and validate request body
+    try:
+        body = await request.json()
+        x402_request = X402ProtocolRequest(**body)
+    except Exception as e:
+        raise FastAPIHTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid request format: {str(e)}"
+        )
+
+    # Verify signature
+    try:
+        is_valid = DIDSigner.verify_signature(
+            payload=x402_request.payload,
+            signature_hex=x402_request.signature,
+            did=x402_request.did
+        )
+
+        if not is_valid:
+            raise FastAPIHTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature: signature verification failed"
+            )
+
+    except InvalidDIDError as e:
+        raise FastAPIHTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid DID format: {str(e)}"
+        )
+    except FastAPIHTTPException:
+        raise
+    except Exception as e:
+        raise FastAPIHTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Signature verification error: {str(e)}"
+        )
+
+    # Generate request ID and timestamp
+    request_id = x402_service.generate_request_id()
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    # Store request (best effort)
+    try:
+        await x402_service.create_request(
+            project_id="x402_protocol",
+            agent_id=x402_request.did,
+            task_id="x402_protocol_request",
+            run_id=request_id,
+            request_payload=x402_request.payload,
+            signature=x402_request.signature,
+            metadata={
+                "source": "x402_protocol_endpoint",
+                "signature_verified": True
+            }
+        )
+    except Exception:
+        pass  # Best effort logging
+
+    return X402ProtocolResponse(
+        request_id=request_id,
+        status="received",
+        timestamp=timestamp
+    )
+
+
 # Health check endpoint
 @app.get(
     "/health",
@@ -155,9 +260,10 @@ async def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(projects_router)
-# Epic 4 Issue 16: Include embed-store router
-app.include_router(embed_store_router)
+# Issue #79: embeddings_router must come first to handle single 'text' field properly
+# embeddings_router handles single text (text field), embed_store_router handles batch (documents field)
 app.include_router(embeddings_router)
+app.include_router(embed_store_router)
 app.include_router(vectors_router)
 app.include_router(events_router)
 app.include_router(agent_memory_router)
