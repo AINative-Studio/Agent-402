@@ -398,3 +398,102 @@ async def get_x402_request(
         linked_memories=request_data.get("linked_memories", []),
         linked_compliance_events=request_data.get("linked_compliance_events", [])
     )
+
+
+@router.get(
+    "/{project_id}/agents/{agent_id}/x402-requests",
+    response_model=X402RequestListResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Successfully retrieved X402 requests for agent",
+            "model": X402RequestListResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        }
+    },
+    summary="Get all X402 requests by agent (Issue #64)",
+    description="""
+    Get all X402 requests for a specific agent.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Issue #64 Requirements:**
+    - Returns all X402 requests created by the specified agent
+    - Includes agent_id and task_id linkage for each request
+    - Supports pagination with limit parameter
+    - Enables agent-specific audit and traceability
+
+    **Per PRD Section 6 (ZeroDB Integration):**
+    - Enables agent activity tracking
+    - Supports agent accountability and audit
+    - Provides traceability for agent-generated X402 requests
+
+    **Per PRD Section 8 (X402 Protocol):**
+    - Returns all payment authorizations by agent
+    - Includes complete request payloads and signatures
+    - Supports agent performance analysis
+
+    **Returns:**
+    - Array of X402 requests for the agent
+    - Each request includes agent_id and task_id linkage
+    - Total count and pagination metadata
+    """
+)
+async def get_x402_requests_by_agent(
+    project_id: str = Path(..., description="Project ID"),
+    agent_id: str = Path(..., description="Agent ID to filter by"),
+    limit: int = Query(
+        100,
+        ge=1,
+        le=1000,
+        description="Maximum number of results (1-1000)"
+    ),
+    current_user: str = Depends(get_current_user)
+) -> X402RequestListResponse:
+    """
+    Get all X402 requests for a specific agent.
+
+    Args:
+        project_id: Project identifier
+        agent_id: Agent identifier to filter by
+        limit: Maximum results to return
+        current_user: Authenticated user ID
+
+    Returns:
+        X402RequestListResponse with all requests for the agent
+    """
+    # Get requests for the agent
+    requests = await x402_service.get_requests_by_agent(
+        project_id=project_id,
+        agent_id=agent_id,
+        limit=limit
+    )
+
+    # Convert to response models
+    request_responses = [
+        X402RequestResponse(
+            request_id=req["request_id"],
+            project_id=req["project_id"],
+            agent_id=req["agent_id"],
+            task_id=req["task_id"],
+            run_id=req["run_id"],
+            request_payload=req["request_payload"],
+            signature=req["signature"],
+            status=X402RequestStatus(req["status"]),
+            timestamp=req["timestamp"],
+            linked_memory_ids=req.get("linked_memory_ids", []),
+            linked_compliance_ids=req.get("linked_compliance_ids", []),
+            metadata=req.get("metadata")
+        )
+        for req in requests
+    ]
+
+    return X402RequestListResponse(
+        requests=request_responses,
+        total=len(request_responses),
+        limit=limit,
+        offset=0
+    )
