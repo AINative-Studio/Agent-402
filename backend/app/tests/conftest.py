@@ -79,6 +79,17 @@ def override_zerodb_client(monkeypatch, mock_zerodb_client):
 
     autouse=True means this fixture runs for every test automatically.
     """
+    # Reset the client cache in all service singletons
+    from app.services.agent_service import agent_service
+    from app.services.x402_service import x402_service
+    from app.services.compliance_service import compliance_service
+    from app.services.event_service import event_service
+
+    agent_service._client = None
+    x402_service._client = None
+    compliance_service._client = None
+    event_service._client = None
+
     # Patch the get_zerodb_client function in the zerodb_client module
     monkeypatch.setattr(
         "app.services.zerodb_client.get_zerodb_client",

@@ -14,6 +14,23 @@ Tests error cases: request not found, invalid status
 """
 import pytest
 from fastapi import status
+from unittest.mock import patch
+
+
+@pytest.fixture(autouse=True)
+def mock_signature_verification(monkeypatch):
+    """
+    Mock DID signature verification for all tests in this module.
+    This allows tests to focus on API logic rather than cryptographic validation.
+    """
+    def mock_verify(payload, signature_hex, did):
+        """Always return True for signature verification in tests."""
+        return True
+
+    monkeypatch.setattr(
+        "app.api.x402_requests.DIDSigner.verify_signature",
+        mock_verify
+    )
 
 
 class TestCreateX402Request:
@@ -66,7 +83,10 @@ class TestCreateX402Request:
         assert "timestamp" in data
         assert data["linked_memory_ids"] == request_data["linked_memory_ids"]
         assert data["linked_compliance_ids"] == request_data["linked_compliance_ids"]
-        assert data["metadata"] == request_data["metadata"]
+        # Metadata includes signature_verified from the API
+        assert data["metadata"]["priority"] == request_data["metadata"]["priority"]
+        assert data["metadata"]["source"] == request_data["metadata"]["source"]
+        assert data["metadata"]["signature_verified"] is True
 
     def test_create_x402_request_minimal(self, client, auth_headers_user1):
         """
@@ -98,7 +118,8 @@ class TestCreateX402Request:
         assert data["status"] == "PENDING"  # Default status
         assert data["linked_memory_ids"] == []
         assert data["linked_compliance_ids"] == []
-        assert data["metadata"] is None
+        # Metadata will contain signature_verified even for minimal requests
+        assert data["metadata"] == {"signature_verified": True}
 
     def test_create_x402_request_all_statuses(self, client, auth_headers_user1):
         """
@@ -283,11 +304,15 @@ class TestListX402Requests:
     """Test suite for GET /v1/public/{project_id}/x402-requests endpoint."""
 
     @pytest.fixture(autouse=True)
-    def setup_test_data(self, client, auth_headers_user1):
+    def setup_test_data(self, client, auth_headers_user1, override_zerodb_client):
         """Create test X402 requests for filtering tests."""
-        # Clean up previous test data
+        # Clean up previous test data BEFORE each test
+        override_zerodb_client.reset()
+
+        # IMPORTANT: Reset the service's cached client reference
+        # The x402_service singleton caches its client on first use
         from app.services.x402_service import x402_service
-        x402_service._request_store.clear()
+        x402_service._client = None
 
         project_id = "proj_demo_user1_001"
 
@@ -341,6 +366,11 @@ class TestListX402Requests:
                 json=req_data,
                 headers=auth_headers_user1
             )
+
+        yield  # Test runs here
+
+        # Cleanup after test
+        override_zerodb_client.reset()
 
     def test_list_all_requests(self, client, auth_headers_user1):
         """

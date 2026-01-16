@@ -5,28 +5,39 @@ Epic 12, Issue 1: Agent profiles with did, role, name, description, scope.
 """
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from enum import Enum
+from pydantic import BaseModel, Field, field_validator
 from app.models.agent import AgentScope
+
+
+class AgentRole(str, Enum):
+    """
+    Agent role enumeration per Issue #61.
+    Defines the role/function of a CrewAI agent.
+    """
+    ANALYST = "analyst"
+    COMPLIANCE = "compliance"
+    TRANSACTION = "transaction"
+    ORCHESTRATOR = "orchestrator"
 
 
 class AgentCreateRequest(BaseModel):
     """
     Request schema for POST /v1/public/{project_id}/agents.
     Creates a new agent profile within a project.
+    Per Issue #61: DID format validation and role enum validation.
     """
     did: str = Field(
         ...,
-        description="Decentralized Identifier for the agent",
+        description="Decentralized Identifier for the agent (must be did:key:z6Mk... format)",
         min_length=1,
         max_length=256,
-        examples=["did:web:agent.example.com:researcher-01"]
+        examples=["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
     )
-    role: str = Field(
+    role: AgentRole = Field(
         ...,
-        description="Agent role (e.g., researcher, analyst, executor)",
-        min_length=1,
-        max_length=100,
-        examples=["researcher"]
+        description="Agent role (analyst, compliance, transaction, orchestrator)",
+        examples=["analyst"]
     )
     name: str = Field(
         ...,
@@ -42,18 +53,39 @@ class AgentCreateRequest(BaseModel):
         examples=["Specialized agent for financial research and data gathering"]
     )
     scope: AgentScope = Field(
-        AgentScope.PROJECT,
-        description="Operational scope of the agent"
+        AgentScope.RUN,
+        description="Operational scope of the agent (SYSTEM, PROJECT, RUN)"
     )
+
+    @field_validator('did')
+    @classmethod
+    def validate_did_format(cls, v: str) -> str:
+        """
+        Validate DID format per Issue #61.
+        Must be did:key:z6Mk... format.
+        """
+        if not v.startswith("did:key:"):
+            raise ValueError("DID must start with 'did:key:' prefix")
+
+        # Extract the identifier part after did:key:
+        identifier = v[8:]  # Remove "did:key:" prefix
+
+        if not identifier.startswith("z6Mk"):
+            raise ValueError("DID key identifier must start with 'z6Mk'")
+
+        if len(identifier) < 10:
+            raise ValueError("DID key identifier is too short")
+
+        return v
 
     class Config:
         json_schema_extra = {
             "example": {
-                "did": "did:web:agent.example.com:researcher-01",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "role": "analyst",
                 "name": "Research Agent Alpha",
                 "description": "Specialized agent for financial research and data gathering",
-                "scope": "PROJECT"
+                "scope": "RUN"
             }
         }
 
@@ -63,11 +95,9 @@ class UpdateAgentRequest(BaseModel):
     Request schema for PATCH /v1/public/{project_id}/agents/{agent_id}.
     Updates an existing agent profile. All fields are optional.
     """
-    role: Optional[str] = Field(
+    role: Optional[AgentRole] = Field(
         None,
-        description="Agent role (e.g., researcher, analyst, executor)",
-        min_length=1,
-        max_length=100,
+        description="Agent role (analyst, compliance, transaction, orchestrator)",
         examples=["analyst"]
     )
     name: Optional[str] = Field(
@@ -85,7 +115,7 @@ class UpdateAgentRequest(BaseModel):
     )
     scope: Optional[AgentScope] = Field(
         None,
-        description="Operational scope of the agent"
+        description="Operational scope of the agent (SYSTEM, PROJECT, RUN)"
     )
 
     class Config:
@@ -94,7 +124,7 @@ class UpdateAgentRequest(BaseModel):
                 "role": "analyst",
                 "name": "Updated Research Agent",
                 "description": "Updated agent description",
-                "scope": "GLOBAL"
+                "scope": "PROJECT"
             }
         }
 

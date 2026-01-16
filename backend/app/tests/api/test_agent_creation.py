@@ -214,9 +214,9 @@ class TestAgentCreationRoleValidation:
 class TestAgentCreationScopeValidation:
     """Test scope enum validation per Issue #61."""
 
-    
+
     def test_create_agent_with_default_run_scope(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation defaults to RUN scope when not specified."""
         payload = {
@@ -234,9 +234,9 @@ class TestAgentCreationScopeValidation:
         assert response.status_code == 201
         assert response.json()["scope"] == "RUN"
 
-    
+
     def test_create_agent_with_explicit_run_scope(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation with explicit RUN scope."""
         payload = {
@@ -255,9 +255,9 @@ class TestAgentCreationScopeValidation:
         assert response.status_code == 201
         assert response.json()["scope"] == "RUN"
 
-    
+
     def test_create_agent_with_project_scope(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation with PROJECT scope."""
         payload = {
@@ -276,9 +276,9 @@ class TestAgentCreationScopeValidation:
         assert response.status_code == 201
         assert response.json()["scope"] == "PROJECT"
 
-    
+
     def test_create_agent_with_system_scope(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation with SYSTEM scope."""
         payload = {
@@ -297,9 +297,9 @@ class TestAgentCreationScopeValidation:
         assert response.status_code == 201
         assert response.json()["scope"] == "SYSTEM"
 
-    
+
     def test_create_agent_with_invalid_scope(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation fails with invalid scope."""
         payload = {
@@ -321,9 +321,9 @@ class TestAgentCreationScopeValidation:
 class TestAgentCreationRequiredFields:
     """Test required fields validation."""
 
-    
+
     def test_create_agent_missing_did(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation fails without DID."""
         payload = {
@@ -341,9 +341,9 @@ class TestAgentCreationRequiredFields:
         data = response.json()
         assert "detail" in data
 
-    
+
     def test_create_agent_missing_role(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation fails without role."""
         payload = {
@@ -359,9 +359,9 @@ class TestAgentCreationRequiredFields:
 
         assert response.status_code == 422
 
-    
+
     def test_create_agent_missing_name(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation fails without name."""
         payload = {
@@ -377,9 +377,9 @@ class TestAgentCreationRequiredFields:
 
         assert response.status_code == 422
 
-    
+
     def test_create_agent_with_all_required_fields(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation succeeds with all required fields."""
         payload = {
@@ -405,9 +405,9 @@ class TestAgentCreationRequiredFields:
 class TestAgentCreationOptionalFields:
     """Test optional fields handling."""
 
-    
+
     def test_create_agent_with_description(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation with optional description field."""
         payload = {
@@ -426,9 +426,9 @@ class TestAgentCreationOptionalFields:
         assert response.status_code == 201
         assert response.json()["description"] == payload["description"]
 
-    
+
     def test_create_agent_without_description(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation without description field."""
         payload = {
@@ -452,9 +452,9 @@ class TestAgentCreationOptionalFields:
 class TestAgentCreationResponse:
     """Test response structure and fields."""
 
-    
+
     def test_create_agent_response_includes_all_fields(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent creation response includes all expected fields."""
         payload = {
@@ -494,9 +494,9 @@ class TestAgentCreationResponse:
         assert data["scope"] == payload["scope"]
         assert data["project_id"] == test_project_id
 
-    
+
     def test_create_agent_response_agent_id_format(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test agent_id has correct format."""
         payload = {
@@ -516,9 +516,9 @@ class TestAgentCreationResponse:
         assert data["agent_id"].startswith("agent_")
         assert len(data["agent_id"]) > 10
 
-    
+
     def test_create_agent_response_timestamps_format(
-        self, client, test_project_id
+        self, client, auth_headers_user1, test_project_id
     ):
         """Test created_at and updated_at have correct ISO format."""
         payload = {

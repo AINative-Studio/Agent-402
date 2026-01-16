@@ -125,7 +125,7 @@ class TestAgentMemorySmokeBasic:
         assert data["run_id"] == "run_002"
         assert data["memory_type"] == "observation"
         assert data["content"] == "Observed high transaction volume in region"
-        assert data["namespace"] == "default"  # Service returns "default" for namespace
+        assert data["namespace"] == "smoke_test"  # Namespace is correctly stored and retrieved
         assert data["metadata"]["region"] == "US-EAST"
         assert data["metadata"]["volume"] == 1500
         assert data["project_id"] == project_id
@@ -424,7 +424,7 @@ class TestAgentMemorySmokeMetadata:
         assert len(data["content"]) > 0
 
         assert isinstance(data["namespace"], str)
-        assert data["namespace"] == "default"
+        assert data["namespace"] == "smoke_test"  # Namespace is correctly stored and retrieved
 
         assert isinstance(data["timestamp"], str)
         # Validate timestamp is ISO format

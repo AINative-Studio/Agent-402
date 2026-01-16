@@ -53,11 +53,11 @@ def _row_to_agent(row_data: dict) -> Agent:
 
     # Parse scope enum from config or direct field
     config = data.get("config", {})
-    scope_value = config.get("scope", data.get("scope", "PROJECT"))
+    scope_value = config.get("scope", data.get("scope", "RUN"))
     try:
         scope = AgentScope(scope_value)
     except ValueError:
-        scope = AgentScope.PROJECT
+        scope = AgentScope.RUN
 
     # Get description from config or direct field
     description = config.get("description", data.get("description"))
@@ -204,7 +204,7 @@ class AgentService:
         role: str,
         name: str,
         description: Optional[str] = None,
-        scope: AgentScope = AgentScope.PROJECT
+        scope: AgentScope = AgentScope.RUN
     ) -> Agent:
         """
         Create a new agent in a project.

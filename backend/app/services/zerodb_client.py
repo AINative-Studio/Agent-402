@@ -457,6 +457,8 @@ class ZeroDBClient:
         Generate embeddings for texts.
 
         POST /v1/public/zerodb/{project_id}/embeddings/generate
+
+        Note: ZeroDB API expects 'texts' (plural array).
         """
         payload = {
             "texts": texts,
@@ -484,6 +486,8 @@ class ZeroDBClient:
         Generate embeddings and store in one call.
 
         POST /v1/public/zerodb/{project_id}/embeddings/embed-and-store
+
+        Note: ZeroDB API expects 'texts' (plural array), not 'documents'.
         """
         payload = {
             "texts": texts,

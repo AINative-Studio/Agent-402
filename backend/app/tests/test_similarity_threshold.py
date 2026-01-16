@@ -71,8 +71,8 @@ def setup_test_vectors(client, auth_headers, test_project_id):
     predictable similarity scores when queried.
     """
     # Store multiple vectors with different content
-    # Using the batch embed-and-store endpoint with texts array (Issue #16)
-    test_texts = [
+    # Using the batch embed-and-store endpoint with documents array (Issue #16)
+    test_documents = [
         "autonomous agent workflow",
         "agent system design",
         "workflow automation",
@@ -80,11 +80,11 @@ def setup_test_vectors(client, auth_headers, test_project_id):
         "random text about nothing",
     ]
 
-    # Use the texts (array) field per the updated endpoint
+    # Use the documents (array) field per the updated endpoint
     response = client.post(
         f"/v1/public/{test_project_id}/embeddings/embed-and-store",
         json={
-            "texts": test_texts,
+            "documents": test_documents,
             "namespace": "threshold_test"
         },
         headers=auth_headers
@@ -583,13 +583,13 @@ class TestThresholdEdgeCases:
 
         Issue #25 Requirement: Threshold should work with other filters.
         """
-        # Store vectors with metadata using the texts array field
+        # Store vectors with metadata using the documents array field
         client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "texts": ["agent workflow alpha"],
+                "documents": ["agent workflow alpha"],
                 "namespace": "metadata_test",
-                "metadata": {"type": "workflow", "priority": "high"}
+                "metadata": [{"type": "workflow", "priority": "high"}]
             },
             headers=auth_headers
         )
@@ -597,9 +597,9 @@ class TestThresholdEdgeCases:
         client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "texts": ["agent workflow beta"],
+                "documents": ["agent workflow beta"],
                 "namespace": "metadata_test",
-                "metadata": {"type": "workflow", "priority": "low"}
+                "metadata": [{"type": "workflow", "priority": "low"}]
             },
             headers=auth_headers
         )

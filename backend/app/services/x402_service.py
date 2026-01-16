@@ -231,8 +231,7 @@ class X402Service:
             Tuple of (list of requests, total count)
         """
         try:
-
-            # Build filter
+            # Build filter for fields directly in the table
             query_filter: Dict[str, Any] = {"project_id": project_id}
             if agent_id:
                 query_filter["agent_id"] = agent_id
@@ -242,35 +241,62 @@ class X402Service:
                 status_value = status.value if isinstance(status, X402RequestStatus) else status
                 query_filter["verification_status"] = status_value
 
-            # Query with filter
-            result = await self.client.query_rows(
-                X402_REQUESTS_TABLE,
-                filter=query_filter,
-                limit=limit,
-                skip=offset
-            )
-
-            rows = result.get("rows", [])
-            total = result.get("total", len(rows))
-
-            # Convert rows to request format
-            requests = [self._row_to_request(row) for row in rows]
-
-            # Additional filtering for task_id (stored in body)
+            # Query ALL matching rows (no pagination yet) if we need to filter by task_id
+            # Since task_id is nested in body, we must filter in-memory
             if task_id:
-                requests = [
-                    r for r in requests
+                # Fetch all rows matching other filters
+                result = await self.client.query_rows(
+                    X402_REQUESTS_TABLE,
+                    filter=query_filter,
+                    limit=10000,  # Large limit to get all rows
+                    skip=0
+                )
+
+                rows = result.get("rows", [])
+
+                # Convert all rows to request format
+                all_requests = [self._row_to_request(row) for row in rows]
+
+                # Filter by task_id
+                filtered_requests = [
+                    r for r in all_requests
                     if r.get("task_id") == task_id
                 ]
-                total = len(requests)
 
-            # Sort by timestamp descending (newest first)
-            requests.sort(
-                key=lambda x: x.get("timestamp", ""),
-                reverse=True
-            )
+                # Sort by timestamp descending (newest first)
+                filtered_requests.sort(
+                    key=lambda x: x.get("timestamp", ""),
+                    reverse=True
+                )
 
-            return requests, total
+                # Apply pagination after filtering
+                total = len(filtered_requests)
+                requests = filtered_requests[offset:offset + limit]
+
+                return requests, total
+
+            else:
+                # No task_id filter - we can use database pagination
+                result = await self.client.query_rows(
+                    X402_REQUESTS_TABLE,
+                    filter=query_filter,
+                    limit=limit,
+                    skip=offset
+                )
+
+                rows = result.get("rows", [])
+                total = result.get("total", len(rows))
+
+                # Convert rows to request format
+                requests = [self._row_to_request(row) for row in rows]
+
+                # Sort by timestamp descending (newest first)
+                requests.sort(
+                    key=lambda x: x.get("timestamp", ""),
+                    reverse=True
+                )
+
+                return requests, total
 
         except Exception as e:
             logger.error(f"Failed to list X402 requests: {e}")

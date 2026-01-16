@@ -13,10 +13,11 @@ class AgentScope(str, Enum):
     """
     Agent scope enumeration.
     Defines the operational scope of an agent.
+    Per Issue #61: SYSTEM, PROJECT, RUN scopes.
     """
-    GLOBAL = "GLOBAL"       # Can operate across all projects
+    SYSTEM = "SYSTEM"       # System-wide scope across all projects
     PROJECT = "PROJECT"     # Limited to a single project
-    RESTRICTED = "RESTRICTED"  # Limited with additional constraints
+    RUN = "RUN"            # Limited to a single run (default)
 
 
 @dataclass
@@ -42,7 +43,7 @@ class Agent:
     name: str
     project_id: str
     description: Optional[str] = None
-    scope: AgentScope = AgentScope.PROJECT
+    scope: AgentScope = AgentScope.RUN
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

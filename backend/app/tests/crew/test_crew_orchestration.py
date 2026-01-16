@@ -106,7 +106,7 @@ class TestCrewOrchestration:
     @pytest.mark.asyncio
     async def test_crew_initialization(self):
         """Test that crew is initialized with correct configuration."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
         crew = X402Crew(
             project_id="test_project",
@@ -195,9 +195,9 @@ class TestCrewOrchestration:
     @pytest.mark.asyncio
     async def test_crew_returns_x402_request_id(self):
         """Test that crew execution returns X402 request_id."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
-        with patch('backend.app.crew.crew.x402_service') as mock_x402:
+        with patch('app.crew.crew.x402_service') as mock_x402:
             mock_x402.create_request = AsyncMock(return_value={
                 "request_id": "x402_req_test789"
             })
@@ -217,12 +217,12 @@ class TestCrewOrchestration:
     @pytest.mark.asyncio
     async def test_full_workflow_integration(self):
         """Integration test for complete 3-agent workflow."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
         # Mock all external services
-        with patch('backend.app.crew.crew.get_agent_memory_service') as mock_memory, \
-             patch('backend.app.crew.crew.x402_service') as mock_x402, \
-             patch('backend.app.crew.crew.compliance_service') as mock_compliance:
+        with patch('app.crew.crew.get_agent_memory_service') as mock_memory, \
+             patch('app.crew.crew.x402_service') as mock_x402, \
+             patch('app.crew.crew.compliance_service') as mock_compliance:
 
             # Setup mocks
             mock_memory_service = AsyncMock()
@@ -264,32 +264,39 @@ class TestCrewOrchestration:
     @pytest.mark.asyncio
     async def test_crew_handles_compliance_failure(self):
         """Test that crew handles compliance check failures appropriately."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
-        with patch('backend.app.crew.crew.compliance_service') as mock_compliance:
-            mock_compliance.create_event = AsyncMock(return_value={
-                "event_id": "evt_failed",
-                "outcome": "FAIL",
-                "risk_score": 0.9
-            })
+        crew = X402Crew(
+            project_id="test_project",
+            run_id="test_run"
+        )
 
-            crew = X402Crew(
-                project_id="test_project",
-                run_id="test_run"
-            )
+        # Mock the compliance task to return FAIL status
+        async def mock_compliance_fail(analyst_output):
+            return {
+                "aml_check": "FAIL",
+                "kyc_check": "FAIL",
+                "sanctions_screening": "FLAGGED",
+                "risk_score": 0.9,
+                "risk_level": "high",
+                "compliance_status": "FAIL",
+                "analyst_memory_id": analyst_output.get("memory_id"),
+                "memory_id": "mem_compliance_fail",
+                "event_id": "evt_failed"
+            }
 
-            # Verify crew can handle compliance failures without crashing
-            # This should raise an appropriate exception or return failure status
-            with patch.object(crew, '_execute_crew', side_effect=Exception("Compliance check failed")):
-                with pytest.raises(Exception) as exc_info:
-                    await crew.kickoff(input_data={"query": "Test query"})
+        with patch.object(crew, '_execute_compliance_task', side_effect=mock_compliance_fail):
+            # Verify crew raises exception when compliance fails
+            # The transaction task should detect FAIL status and abort
+            with pytest.raises(Exception) as exc_info:
+                await crew.kickoff(input_data={"query": "Test query"})
 
-                assert "compliance" in str(exc_info.value).lower() or "failed" in str(exc_info.value).lower()
+            assert "compliance" in str(exc_info.value).lower() or "failed" in str(exc_info.value).lower() or "aborted" in str(exc_info.value).lower()
 
     @pytest.mark.asyncio
     async def test_crew_agent_count(self):
         """Test that crew has exactly 3 agents."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
         crew = X402Crew(
             project_id="test_project",
@@ -308,7 +315,7 @@ class TestCrewOrchestration:
     @pytest.mark.asyncio
     async def test_crew_task_dependencies(self):
         """Test that tasks have proper sequential dependencies."""
-        from backend.app.crew.crew import X402Crew
+        from app.crew.crew import X402Crew
 
         crew = X402Crew(
             project_id="test_project",

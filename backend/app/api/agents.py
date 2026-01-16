@@ -111,7 +111,7 @@ async def create_agent(
     agent = await agent_service.create_agent(
         project_id=project_id,
         did=request.did,
-        role=request.role,
+        role=request.role.value,  # Convert enum to string
         name=request.name,
         description=request.description,
         scope=request.scope
@@ -343,7 +343,7 @@ async def update_agent(
         agent_id=agent_id,
         project_id=project_id,
         name=request.name,
-        role=request.role,
+        role=request.role.value if request.role else None,  # Convert enum to string
         description=request.description,
         scope=request.scope
     )

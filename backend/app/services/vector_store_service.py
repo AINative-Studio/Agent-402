@@ -416,12 +416,13 @@ class VectorStoreService:
             return []
 
         # Calculate cosine similarity for each vector
-        # Issue #24: Apply metadata filters AFTER similarity search
+        # Issue #25: Apply similarity threshold first
         results = []
         for vector_id, vector_data in filtered_vectors.items():
             embedding = vector_data["embedding"]
             similarity = self._cosine_similarity(query_embedding, embedding)
 
+            # Issue #25: Only include results >= similarity_threshold
             if similarity >= similarity_threshold:
                 # Build result with ALL fields initially (for filtering)
                 # Issue #26: Conditional inclusion happens AFTER filtering
@@ -439,12 +440,11 @@ class VectorStoreService:
 
                 results.append(result)
 
-        # Sort by similarity descending and limit to top_k BEFORE metadata filtering
-        # This ensures we get the most similar results before applying metadata constraints
+        # Issue #25: Sort by similarity descending BEFORE metadata filtering and top_k
         results.sort(key=lambda x: x["similarity"], reverse=True)
-        results = results[:top_k]
 
-        # Issue #24: Apply metadata filters AFTER similarity search to refine results
+        # Issue #24: Apply metadata filters AFTER similarity search and sorting, BEFORE top_k
+        # This ensures threshold is applied first, then metadata filters, then top_k limiting
         if metadata_filter:
             before_count = len(results)
             results = MetadataFilter.filter_results(results, metadata_filter)
@@ -456,6 +456,10 @@ class VectorStoreService:
                     "filter": metadata_filter
                 }
             )
+
+        # Issue #22, #25: Apply top_k AFTER threshold and metadata filtering
+        # This ensures we return the top K results that pass both threshold and filters
+        results = results[:top_k]
 
         # Issue #26: Remove metadata and/or embeddings from results if not requested
         # This happens AFTER filtering so filters can access metadata

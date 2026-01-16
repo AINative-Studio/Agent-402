@@ -70,7 +70,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
     """
     test_vectors = [
         {
-            "texts": ["Agent 1 memory about fintech compliance"],
+            "text": "Agent 1 memory about fintech compliance",
             "metadata": {
                 "agent_id": "agent_1",
                 "source": "memory",
@@ -80,7 +80,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
             }
         },
         {
-            "texts": ["Agent 1 decision on transaction"],
+            "text": "Agent 1 decision on transaction",
             "metadata": {
                 "agent_id": "agent_1",
                 "source": "decision",
@@ -90,7 +90,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
             }
         },
         {
-            "texts": ["Agent 2 compliance check result"],
+            "text": "Agent 2 compliance check result",
             "metadata": {
                 "agent_id": "agent_2",
                 "source": "compliance",
@@ -100,7 +100,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
             }
         },
         {
-            "texts": ["Agent 2 memory about risk assessment"],
+            "text": "Agent 2 memory about risk assessment",
             "metadata": {
                 "agent_id": "agent_2",
                 "source": "memory",
@@ -110,7 +110,7 @@ def setup_test_vectors(client, auth_headers, test_project_id):
             }
         },
         {
-            "texts": ["Agent 3 fintech analysis"],
+            "text": "Agent 3 fintech analysis",
             "metadata": {
                 "agent_id": "agent_3",
                 "source": "decision",
@@ -872,7 +872,7 @@ class TestExistsOperator:
         response = client.post(
             f"/v1/public/{test_project_id}/embeddings/embed-and-store",
             json={
-                "texts": ["Test vector with agent_id"],
+                "text": "Test vector with agent_id",
                 "metadata": {"agent_id": "agent_test"}
             },
             headers=auth_headers

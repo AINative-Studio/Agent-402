@@ -128,108 +128,113 @@ async def generate_embedding(
     )
 
 
-@router.post(
-    "/{project_id}/embeddings/embed-and-store",
-    response_model=EmbedAndStoreResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {
-            "description": "Successfully embedded and stored vector",
-            "model": EmbedAndStoreResponse
-        },
-        401: {
-            "description": "Invalid or missing API key",
-            "model": ErrorResponse
-        },
-        409: {
-            "description": "Vector already exists (when upsert=false)",
-            "model": ErrorResponse
-        },
-        422: {
-            "description": "Validation error",
-            "model": ErrorResponse
-        }
-    },
-    summary="Generate embedding and store in vector database",
-    description="""
-    Generate an embedding vector for the provided text and store it.
-
-    **Authentication:** Requires X-API-Key header
-
-    **Epic 4 Story 3 (Issue #18) - Upsert Behavior:**
-    - When `upsert=true`: Updates existing vector if `vector_id` exists (idempotent)
-    - When `upsert=false` (default): Creates new vector or returns 409 error if `vector_id` exists
-    - Prevents duplicate vectors with same ID when upsert=false
-
-    **Epic 4 Story 4 (Issue #19) - Response Fields:**
-    - Response MUST include: vectors_stored, model, dimensions
-    - Returns created=true for new vectors, created=false for updates
-    - Includes processing_time_ms for observability
-
-    **Per PRD §10 (Replayability):**
-    - Same request with upsert=true produces identical result (idempotent)
-    - Deterministic behavior for agent workflows
-
-    **Supported Models:**
-    - BAAI/bge-small-en-v1.5: 384 dimensions (default)
-    - BAAI/bge-base-en-v1.5: 768 dimensions
-    - BAAI/bge-large-en-v1.5: 1024 dimensions
-    """
-)
-async def embed_and_store(
-    project_id: str = Path(..., description="Project ID"),
-    request: EmbedAndStoreRequest = ...,
-    current_user: str = Depends(get_current_user)
-) -> EmbedAndStoreResponse:
-    """
-    Generate an embedding and store it in the vector database.
-
-    Issue #18 Implementation:
-    - Supports upsert parameter for update vs create behavior
-    - When upsert=true: Updates existing vector (idempotent)
-    - When upsert=false: Errors if vector_id exists (prevents duplicates)
-
-    Issue #19 Implementation:
-    - Returns vectors_stored, model, dimensions in response
-    - Provides processing_time_ms for observability
-
-    Args:
-        project_id: Project identifier
-        request: Embed and store request with text, model, metadata, vector_id, upsert
-        current_user: Authenticated user ID
-
-    Returns:
-        EmbedAndStoreResponse with storage confirmation and metadata
-    """
-    # Call embedding service with namespace support (Issue #17) and upsert logic (Issue #19)
-    vectors_stored, vector_id, model_used, dimensions, created, processing_time, stored_at = (
-        await embedding_service.embed_and_store(
-            text=request.text,
-            model=request.model,
-            namespace=request.namespace,  # Issue #17: Pass namespace for isolation
-            metadata=request.metadata,
-            vector_id=request.vector_id,
-            upsert=request.upsert,
-            project_id=project_id,
-            user_id=current_user
-        )
-    )
-
-    # Issue #17: Get namespace from request or use default
-    from app.services.vector_store_service import DEFAULT_NAMESPACE
-    namespace_used = request.namespace or DEFAULT_NAMESPACE
-
-    return EmbedAndStoreResponse(
-        vectors_stored=vectors_stored,  # Issue #19: Required field - count from service
-        vector_id=vector_id,
-        namespace=namespace_used,  # Issue #17: Confirm namespace
-        model=model_used,  # Issue #19: Required field
-        dimensions=dimensions,  # Issue #19: Required field
-        text=request.text,
-        created=created,
-        processing_time_ms=processing_time,
-        stored_at=stored_at
-    )
+# NOTE: This embed-and-store endpoint is commented out to avoid routing conflicts
+# with the batch embed-and-store endpoint in embeddings_embed_store.py (Issue #16).
+# The batch endpoint supports both single and multiple documents via the 'documents' field.
+# If you need a single-document API, wrap it in an array: {"documents": ["your text"]}
+#
+# @router.post(
+#     "/{project_id}/embeddings/embed-and-store",
+#     response_model=EmbedAndStoreResponse,
+#     status_code=status.HTTP_200_OK,
+#     responses={
+#         200: {
+#             "description": "Successfully embedded and stored vector",
+#             "model": EmbedAndStoreResponse
+#         },
+#         401: {
+#             "description": "Invalid or missing API key",
+#             "model": ErrorResponse
+#         },
+#         409: {
+#             "description": "Vector already exists (when upsert=false)",
+#             "model": ErrorResponse
+#         },
+#         422: {
+#             "description": "Validation error",
+#             "model": ErrorResponse
+#         }
+#     },
+#     summary="Generate embedding and store in vector database",
+#     description="""
+#     Generate an embedding vector for the provided text and store it.
+#
+#     **Authentication:** Requires X-API-Key header
+#
+#     **Epic 4 Story 3 (Issue #18) - Upsert Behavior:**
+#     - When `upsert=true`: Updates existing vector if `vector_id` exists (idempotent)
+#     - When `upsert=false` (default): Creates new vector or returns 409 error if `vector_id` exists
+#     - Prevents duplicate vectors with same ID when upsert=false
+#
+#     **Epic 4 Story 4 (Issue #19) - Response Fields:**
+#     - Response MUST include: vectors_stored, model, dimensions
+#     - Returns created=true for new vectors, created=false for updates
+#     - Includes processing_time_ms for observability
+#
+#     **Per PRD §10 (Replayability):**
+#     - Same request with upsert=true produces identical result (idempotent)
+#     - Deterministic behavior for agent workflows
+#
+#     **Supported Models:**
+#     - BAAI/bge-small-en-v1.5: 384 dimensions (default)
+#     - BAAI/bge-base-en-v1.5: 768 dimensions
+#     - BAAI/bge-large-en-v1.5: 1024 dimensions
+#     """
+# )
+# async def embed_and_store(
+#     project_id: str = Path(..., description="Project ID"),
+#     request: EmbedAndStoreRequest = ...,
+#     current_user: str = Depends(get_current_user)
+# ) -> EmbedAndStoreResponse:
+#     """
+#     Generate an embedding and store it in the vector database.
+#
+#     Issue #18 Implementation:
+#     - Supports upsert parameter for update vs create behavior
+#     - When upsert=true: Updates existing vector (idempotent)
+#     - When upsert=false: Errors if vector_id exists (prevents duplicates)
+#
+#     Issue #19 Implementation:
+#     - Returns vectors_stored, model, dimensions in response
+#     - Provides processing_time_ms for observability
+#
+#     Args:
+#         project_id: Project identifier
+#         request: Embed and store request with text, model, metadata, vector_id, upsert
+#         current_user: Authenticated user ID
+#
+#     Returns:
+#         EmbedAndStoreResponse with storage confirmation and metadata
+#     """
+#     # Call embedding service with namespace support (Issue #17) and upsert logic (Issue #19)
+#     vectors_stored, vector_id, model_used, dimensions, created, processing_time, stored_at = (
+#         await embedding_service.embed_and_store(
+#             text=request.text,
+#             model=request.model,
+#             namespace=request.namespace,  # Issue #17: Pass namespace for isolation
+#             metadata=request.metadata,
+#             vector_id=request.vector_id,
+#             upsert=request.upsert,
+#             project_id=project_id,
+#             user_id=current_user
+#         )
+#     )
+#
+#     # Issue #17: Get namespace from request or use default
+#     from app.services.vector_store_service import DEFAULT_NAMESPACE
+#     namespace_used = request.namespace or DEFAULT_NAMESPACE
+#
+#     return EmbedAndStoreResponse(
+#         vectors_stored=vectors_stored,  # Issue #19: Required field - count from service
+#         vector_id=vector_id,
+#         namespace=namespace_used,  # Issue #17: Confirm namespace
+#         model=model_used,  # Issue #19: Required field
+#         dimensions=dimensions,  # Issue #19: Required field
+#         text=request.text,
+#         created=created,
+#         processing_time_ms=processing_time,
+#         stored_at=stored_at
+#     )
 
 
 @router.post(

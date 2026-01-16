@@ -452,7 +452,7 @@ class TestCompleteWorkflowSmoke:
         print(f"[4/7] Store vector: PASS ({stored_vector_id})")
 
         # Step 5: Create agent
-        agent_did = f"did:ethr:0x{workflow_context['workflow_id'][:40]}"
+        agent_did = f"did:key:z6Mk{workflow_context['workflow_id'][:40]}"
         response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
