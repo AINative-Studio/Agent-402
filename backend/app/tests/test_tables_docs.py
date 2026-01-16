@@ -15,7 +15,7 @@ import pytest
 
 
 # Base path for documentation
-DOCS_BASE = "/Volumes/Cody/projects/Agent402/docs"
+DOCS_BASE = "/Users/aideveloper/Agent-402/docs"
 
 
 class TestTablesDocumentationFiles:
