@@ -29,6 +29,9 @@ class MockZeroDBClient:
         # Auto-incrementing row IDs per table
         self._row_id_counters: Dict[str, int] = {}
 
+        # Table metadata storage: table_name -> schema
+        self.tables: Dict[str, Dict[str, Any]] = {}
+
     def _track_call(self, method: str, **kwargs):
         """Track a method call for verification."""
         self.call_history.append({
@@ -44,6 +47,48 @@ class MockZeroDBClient:
         current = self._row_id_counters[table_name]
         self._row_id_counters[table_name] += 1
         return current
+
+    async def create_table(
+        self,
+        table_name: str,
+        schema_definition: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a new table with schema definition.
+
+        Args:
+            table_name: Name of the table to create
+            schema_definition: Table schema definition
+
+        Returns:
+            Created table metadata
+        """
+        self._track_call("create_table", table_name=table_name, schema=schema_definition)
+
+        # Store table metadata
+        table_id = f"tbl_{uuid.uuid4().hex[:12]}"
+        self.tables[table_name] = {
+            "id": table_id,
+            "table_name": table_name,
+            "schema": schema_definition,
+            "created_at": datetime.utcnow().isoformat() + "Z",
+            "row_count": 0
+        }
+
+        # Initialize empty data for this table
+        self.data[table_name] = []
+
+        return self.tables[table_name]
+
+    async def list_tables(self) -> List[Dict[str, Any]]:
+        """
+        List all tables.
+
+        Returns:
+            List of table metadata
+        """
+        self._track_call("list_tables")
+        return list(self.tables.values())
 
     async def insert_row(
         self,
@@ -479,6 +524,7 @@ class MockZeroDBClient:
         self.call_history.clear()
         self.vectors.clear()
         self._row_id_counters.clear()
+        self.tables.clear()
 
     def get_table_data(self, table_name: str) -> List[Dict[str, Any]]:
         """Get all rows from a table (test helper)."""

@@ -169,7 +169,7 @@ async def create_table(
 
     # Create table - TableAlreadyExistsError is an APIError and will be
     # handled by the exception handler with proper error_code
-    table, created = table_service.create_table(
+    table, created = await table_service.create_table(
         project_id=project_id,
         table_name=request.table_name,
         schema=request.schema,
