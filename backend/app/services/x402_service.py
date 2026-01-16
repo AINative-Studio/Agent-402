@@ -57,10 +57,21 @@ class X402Service:
     Uses ZeroDB for persistence via the x402_requests table.
     """
 
-    def __init__(self):
-        """Initialize the X402 service."""
-        # ZeroDB client is retrieved on-demand via get_zerodb_client()
-        pass
+    def __init__(self, client=None):
+        """
+        Initialize the X402 service.
+
+        Args:
+            client: Optional ZeroDB client instance (for testing)
+        """
+        self._client = client
+
+    @property
+    def client(self):
+        """Lazy initialization of ZeroDB client."""
+        if self._client is None:
+            self._client = get_zerodb_client()
+        return self._client
 
     def generate_request_id(self) -> str:
         """
@@ -133,8 +144,7 @@ class X402Service:
         }
 
         try:
-            client = get_zerodb_client()
-            result = await client.insert_row(X402_REQUESTS_TABLE, row_data)
+            result = await self.client.insert_row(X402_REQUESTS_TABLE, row_data)
             logger.info(f"Created X402 request: {request_id}")
 
             # Return the logical request data structure
@@ -165,8 +175,7 @@ class X402Service:
             X402RequestNotFoundError: If request not found
         """
         try:
-            client = get_zerodb_client()
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 X402_REQUESTS_TABLE,
                 filter={"request_id": request_id, "project_id": project_id},
                 limit=1
@@ -222,7 +231,6 @@ class X402Service:
             Tuple of (list of requests, total count)
         """
         try:
-            client = get_zerodb_client()
 
             # Build filter
             query_filter: Dict[str, Any] = {"project_id": project_id}
@@ -235,7 +243,7 @@ class X402Service:
                 query_filter["verification_status"] = status_value
 
             # Query with filter
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 X402_REQUESTS_TABLE,
                 filter=query_filter,
                 limit=limit,
@@ -289,10 +297,9 @@ class X402Service:
             X402RequestNotFoundError: If request not found
         """
         try:
-            client = get_zerodb_client()
 
             # First, find the row to get its ID
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 X402_REQUESTS_TABLE,
                 filter={"request_id": request_id, "project_id": project_id},
                 limit=1
@@ -309,7 +316,7 @@ class X402Service:
             status_value = status.value if isinstance(status, X402RequestStatus) else status
             updated_row = {**row, "verification_status": status_value}
 
-            await client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
+            await self.client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
             logger.info(f"Updated X402 request {request_id} status to {status_value}")
 
             return self._row_to_request(updated_row)
@@ -341,10 +348,9 @@ class X402Service:
             X402RequestNotFoundError: If request not found
         """
         try:
-            client = get_zerodb_client()
 
             # Find the row
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 X402_REQUESTS_TABLE,
                 filter={"request_id": request_id, "project_id": project_id},
                 limit=1
@@ -369,7 +375,7 @@ class X402Service:
                 body["linked_memory_ids"] = linked_ids
 
             updated_row = {**row, "body": body}
-            await client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
+            await self.client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
             logger.info(f"Added memory link {memory_id} to X402 request {request_id}")
 
             return self._row_to_request(updated_row)
@@ -401,10 +407,9 @@ class X402Service:
             X402RequestNotFoundError: If request not found
         """
         try:
-            client = get_zerodb_client()
 
             # Find the row
-            result = await client.query_rows(
+            result = await self.client.query_rows(
                 X402_REQUESTS_TABLE,
                 filter={"request_id": request_id, "project_id": project_id},
                 limit=1
@@ -429,7 +434,7 @@ class X402Service:
                 body["linked_compliance_ids"] = linked_ids
 
             updated_row = {**row, "body": body}
-            await client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
+            await self.client.update_row(X402_REQUESTS_TABLE, row_id, updated_row)
             logger.info(f"Added compliance link {compliance_id} to X402 request {request_id}")
 
             return self._row_to_request(updated_row)
@@ -492,12 +497,11 @@ class X402Service:
             return []
 
         try:
-            client = get_zerodb_client()
             memories = []
 
             for memory_id in memory_ids:
                 try:
-                    result = await client.query_rows(
+                    result = await self.client.query_rows(
                         "agent_memory",
                         filter={"memory_id": memory_id},
                         limit=1
@@ -545,12 +549,11 @@ class X402Service:
             return []
 
         try:
-            client = get_zerodb_client()
             events = []
 
             for event_id in compliance_ids:
                 try:
-                    result = await client.query_rows(
+                    result = await self.client.query_rows(
                         "compliance_events",
                         filter={"event_id": event_id},
                         limit=1
