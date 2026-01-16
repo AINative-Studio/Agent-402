@@ -17,6 +17,8 @@ Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
 
 Reference: backend/app/schemas/errors.py for error response schemas.
 """
+import logging
+from datetime import datetime
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +27,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.errors import APIError, format_error_response
 from app.core.exceptions import ZeroDBException
+from app.schemas.x402_protocol import X402ProtocolRequest, X402ProtocolResponse
+from app.core.did_signer import DIDSigner, InvalidDIDError
+from app.services.x402_service import x402_service
+
+logger = logging.getLogger(__name__)
 from app.core.middleware import (
     zerodb_exception_handler,
     http_exception_handler,
@@ -199,6 +206,195 @@ async def x402_discovery():
             "description": "Autonomous Fintech Agent Crew - AINative Edition"
         }
     }
+
+
+# X402 Protocol Signed POST Endpoint - Issue #77
+# Per PRD Section 9: X402 signed POST endpoint at root path
+# Must be BEFORE middleware registration to ensure public access (no X-API-Key)
+@app.post(
+    "/x402",
+    tags=["x402"],
+    summary="X402 Protocol Signed POST Endpoint",
+    status_code=status.HTTP_200_OK,
+    response_model=None,
+    responses={
+        200: {
+            "description": "Request received and logged successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "request_id": "x402_req_a1b2c3d4e5f6g7h8",
+                        "status": "received",
+                        "timestamp": "2026-01-14T12:34:56.789Z"
+                    }
+                }
+            }
+        },
+        401: {
+            "description": "Invalid signature or DID format",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": "Invalid signature: signature verification failed",
+                        "error_code": "UNAUTHORIZED"
+                    }
+                }
+            }
+        },
+        422: {
+            "description": "Invalid payload format",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": [
+                            {
+                                "loc": ["body", "payload"],
+                                "msg": "Payload cannot be empty",
+                                "type": "value_error"
+                            }
+                        ],
+                        "error_code": "VALIDATION_ERROR"
+                    }
+                }
+            }
+        }
+    }
+)
+async def x402_signed_request(request: Request):
+    """
+    X402 Protocol Signed POST Endpoint.
+
+    Per PRD Section 9 (System Architecture):
+    - Root-level /x402 endpoint for signed X402 protocol requests
+    - Public endpoint (no X-API-Key authentication required)
+    - Uses DID-based signature verification for authentication
+    - Logs all requests to x402_requests collection for audit trail
+
+    Per Issue #77 Acceptance Criteria:
+    - Accept X402 protocol request format (did, signature, payload)
+    - Verify signature using DID signing service
+    - Return 200 on success with request_id
+    - Return 401 for invalid signatures
+    - Return 422 for invalid payload format
+    - Log to x402_requests collection
+    - Endpoint must NOT require X-API-Key (public protocol endpoint)
+
+    Security:
+    - DID-based authentication via ECDSA signatures
+    - Signature verification against payload hash
+    - Non-repudiation through cryptographic signatures
+    - All requests logged for audit trail
+
+    Request Format:
+        {
+            "did": "did:ethr:0xabc123def456...",
+            "signature": "0x8f3e9a7c2b1d4e6f...",
+            "payload": {
+                "action": "transfer",
+                "amount": 1000,
+                "currency": "USD",
+                "recipient": "did:ethr:0xdef789...",
+                "timestamp": "2026-01-14T12:00:00Z"
+            }
+        }
+
+    Response Format:
+        {
+            "request_id": "x402_req_a1b2c3d4e5f6g7h8",
+            "status": "received",
+            "timestamp": "2026-01-14T12:34:56.789Z"
+        }
+
+    Raises:
+        HTTPException 401: Invalid signature or DID format
+        HTTPException 422: Invalid payload format
+
+    Security Notes:
+        - Uses ECDSA SECP256k1 signature verification
+        - Constant-time signature comparison (via hmac.compare_digest)
+        - SHA256 payload hashing with deterministic JSON serialization
+        - No private keys logged or exposed
+        - All requests logged for audit trail
+        - Rate limiting TODO (max 100 req/min per DID)
+    """
+    # Parse and validate request body
+    try:
+        body = await request.json()
+        x402_request = X402ProtocolRequest(**body)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid request format: {str(e)}"
+        )
+
+    # Verify signature before processing request
+    try:
+        is_valid = DIDSigner.verify_signature(
+            payload=x402_request.payload,
+            signature_hex=x402_request.signature,
+            did=x402_request.did
+        )
+
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature: signature verification failed"
+            )
+
+    except InvalidDIDError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid DID format: {str(e)}"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Catch any other verification errors
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Signature verification error: {str(e)}"
+        )
+
+    # Generate request ID and timestamp
+    request_id = x402_service.generate_request_id()
+    timestamp = datetime.utcnow().isoformat() + "Z"
+
+    # Store request in x402_requests collection
+    # Create a minimal record for protocol-level requests
+    # These differ from /v1/public/{project_id}/x402-requests which require project context
+    try:
+        # For protocol-level requests, we use a special "protocol" project_id
+        await x402_service.create_request(
+            project_id="x402_protocol",
+            agent_id=x402_request.did,
+            task_id="x402_protocol_request",
+            run_id=request_id,
+            request_payload=x402_request.payload,
+            signature=x402_request.signature,
+            metadata={
+                "source": "x402_protocol_endpoint",
+                "signature_verified": True
+            }
+        )
+    except Exception as e:
+        # Log error but don't fail the request
+        # The signature verification already succeeded
+        # This is a best-effort logging mechanism
+        logger.error(
+            f"Failed to store X402 protocol request: {e}",
+            extra={
+                "request_id": request_id,
+                "did": x402_request.did,
+                "error": str(e)
+            }
+        )
+
+    # Return success response
+    return X402ProtocolResponse(
+        request_id=request_id,
+        status="received",
+        timestamp=timestamp
+    )
 
 
 # Health check endpoint
