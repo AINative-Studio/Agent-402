@@ -126,6 +126,17 @@ def override_zerodb_client(monkeypatch, mock_zerodb_client):
         lambda: mock_zerodb_client
     )
 
+    # Issue #114: Circle Wallet Service
+    try:
+        from app.services.circle_wallet_service import circle_wallet_service
+        circle_wallet_service._client = None
+        monkeypatch.setattr(
+            "app.services.circle_wallet_service.get_zerodb_client",
+            lambda: mock_zerodb_client
+        )
+    except ImportError:
+        pass  # Circle service may not exist yet
+
     return mock_zerodb_client
 
 
