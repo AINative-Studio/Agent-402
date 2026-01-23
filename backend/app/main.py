@@ -63,6 +63,8 @@ from app.api.runs import router as runs_router
 from app.api.tables import router as tables_router
 # Epic 7 Issue 4: Row pagination and retrieval
 from app.api.rows import router as rows_router
+# Issue #114: Circle Wallets and USDC Payments
+from app.api.circle import router as circle_router
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -429,6 +431,8 @@ app.include_router(x402_requests_router)
 app.include_router(runs_router)
 app.include_router(tables_router)
 app.include_router(rows_router)
+# Issue #114: Circle Wallets and USDC Payments
+app.include_router(circle_router)
 
 
 # Root endpoint

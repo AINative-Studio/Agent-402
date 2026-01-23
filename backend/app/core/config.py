@@ -65,6 +65,16 @@ class Settings(BaseSettings):
         description="Default embedding dimensions for BAAI/bge-small-en-v1.5"
     )
 
+    # Circle API Configuration (Issue #114)
+    circle_api_key: str = Field(
+        default="test_circle_api_key_change_in_production",
+        description="Circle API key for USDC wallet operations"
+    )
+    circle_base_url: str = Field(
+        default="https://api-sandbox.circle.com",
+        description="Circle API base URL (sandbox for testing)"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
