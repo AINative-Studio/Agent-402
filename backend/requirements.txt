@@ -22,6 +22,10 @@ langchain>=0.1.0
 langchain-community>=0.1.0
 langchain-core>=0.1.0
 
+# Gemini AI (Issue #115)
+google-generativeai>=0.3.0
+google-api-core>=2.15.0
+
 # Testing (dev only)
 pytest>=8.0.0
 pytest-asyncio>=0.24.0
