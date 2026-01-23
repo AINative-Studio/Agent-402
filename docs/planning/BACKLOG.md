@@ -305,3 +305,84 @@
 
 ---
 
+## Epic 13 — Phase 2: Arc/Circle Hackathon Integration (ACTIVE)
+
+**PRD Alignment:** Phase 2 Hackathon Strategy, §6 ZeroDB Integration, §8 X402 Protocol
+
+**Goal:** Win Arc/Circle "Agentic Commerce" Hackathon by integrating Agent-402 with Arc blockchain, Circle USDC, and Gemini AI.
+
+**Deadline:** January 23, 2026 (5:00 PM PST)
+
+**GitHub Issues:**
+- [#113](https://github.com/AINative-Studio/Agent-402/issues/113) - Day 1: Arc Smart Contracts
+- [#114](https://github.com/AINative-Studio/Agent-402/issues/114) - Day 2: Circle Integration
+- [#115](https://github.com/AINative-Studio/Agent-402/issues/115) - Day 3: Gemini AI + Demo
+
+### User Stories - Day 1: Arc Smart Contracts (5 pts)
+
+**Issue #113** - As a developer, I can deploy agent identity infrastructure to Arc blockchain.
+
+1. **(2 pts)** As a system, I can register agents on-chain via AgentRegistry.sol (ERC-721).
+   → PRD §5 (Agent identities + DID)
+
+2. **(2 pts)** As a system, I can emit reputation events via ReputationRegistry.sol.
+   → PRD §6 (Non-repudiable audit trail)
+
+3. **(1 pt)** As an agent, I have a Circle Wallet treasury via AgentTreasury.sol.
+   → PRD §8 (Agent-to-agent payments)
+
+**Acceptance Criteria:**
+- [ ] 3 contracts deployed to Arc Testnet
+- [ ] Contract addresses verified on Arc Explorer
+- [ ] 3 test agents registered on-chain
+
+### User Stories - Day 2: Circle Integration (5 pts)
+
+**Issue #114** - As an agent, I can receive and send USDC payments on Arc.
+
+1. **(2 pts)** As an agent, I have a Circle Wallet with USDC balance.
+   → PRD §8 (Agent treasuries)
+
+2. **(2 pts)** As a system, X402 payments trigger USDC transfers on Arc.
+   → PRD §8 (X402 protocol + USDC bridge)
+
+3. **(1 pt)** As a developer, I can verify payment receipts on Arc Explorer.
+   → PRD §10 (Auditability)
+
+**Acceptance Criteria:**
+- [ ] 3 agents with functional Circle Wallets
+- [ ] x402 → USDC payment flow working
+- [ ] All transactions visible on Arc Explorer
+
+### User Stories - Day 3: Gemini AI + Demo (3 pts)
+
+**Issue #115** - As a developer, I can demonstrate autonomous agents using Gemini AI.
+
+1. **(1 pt)** As an analyst agent, I use Gemini 3 Pro for deep reasoning.
+   → PRD §5 (Analyst persona)
+
+2. **(1 pt)** As a transaction agent, I use Gemini 3 Flash for fast routing.
+   → PRD §5 (Transaction persona)
+
+3. **(1 pt)** As a team, we have a polished demo video and submission materials.
+   → Hackathon submission requirements
+
+**Acceptance Criteria:**
+- [ ] All agents running on Gemini models
+- [ ] Function calling to Circle APIs working
+- [ ] Demo video recorded (< 5 min)
+- [ ] Submission completed by 4 PM PST
+
+### Technical Stack Additions
+- **Blockchain:** Arc L1 (testnet: 1994, mainnet: 1993)
+- **Smart Contracts:** Hardhat + OpenZeppelin
+- **Payments:** Circle Wallets, Circle Gateway, USDC
+- **AI:** Gemini 3 Pro, Gemini 3 Flash
+
+### Success Metrics
+- **Performance:** < 1s transaction finality on Arc
+- **Scale:** 3 agents, 10+ transactions, 100% audit trail
+- **Trust:** 100% signature verification, 0 failed USDC transfers
+
+---
+
