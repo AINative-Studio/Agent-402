@@ -137,6 +137,23 @@ def override_zerodb_client(monkeypatch, mock_zerodb_client):
     except ImportError:
         pass  # Circle service may not exist yet
 
+    # Issues #119 + #122: X402 Payment Tracker and Agent Interactions
+    try:
+        from app.services.x402_payment_tracker import x402_payment_tracker
+        from app.services.agent_interactions_service import agent_interactions_service
+        x402_payment_tracker._client = None
+        agent_interactions_service._client = None
+        monkeypatch.setattr(
+            "app.services.x402_payment_tracker.get_zerodb_client",
+            lambda: mock_zerodb_client
+        )
+        monkeypatch.setattr(
+            "app.services.agent_interactions_service.get_zerodb_client",
+            lambda: mock_zerodb_client
+        )
+    except ImportError:
+        pass  # Services may not exist yet
+
     return mock_zerodb_client
 
 

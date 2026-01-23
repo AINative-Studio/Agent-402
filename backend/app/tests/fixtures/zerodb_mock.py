@@ -242,7 +242,7 @@ class MockZeroDBClient:
 
         Args:
             table_name: Table name
-            row_id: Row ID to update
+            row_id: Row ID to update (can be int or UUID string)
             row_data: New row data
 
         Returns:
@@ -258,22 +258,33 @@ class MockZeroDBClient:
         if table_name not in self.data:
             raise ValueError(f"Table {table_name} not found")
 
-        # Find row by ID
-        row_id_int = int(row_id) if isinstance(row_id, str) else row_id
+        # Find row by ID - support both int and UUID string IDs
+        # Try to convert to int, but fall back to string comparison
+        try:
+            row_id_normalized = int(row_id) if isinstance(row_id, str) and row_id.isdigit() else row_id
+        except (ValueError, TypeError):
+            row_id_normalized = row_id
 
         for i, row in enumerate(self.data[table_name]):
-            if row.get("id") == row_id_int or row.get("row_id") == row_id_int:
-                # Update row
+            row_stored_id = row.get("id")
+            row_stored_row_id = row.get("row_id")
+
+            # Match on either id or row_id, using string comparison for UUIDs
+            if (row_stored_id == row_id_normalized or
+                row_stored_row_id == row_id_normalized or
+                str(row_stored_id) == str(row_id) or
+                str(row_stored_row_id) == str(row_id)):
+                # Update row - preserve the original ID format
                 updated_row = {
-                    "id": row_id_int,
-                    "row_id": row_id_int,
-                    **row_data
+                    **row_data,
+                    "id": row_stored_id,
+                    "row_id": row_stored_row_id if row_stored_row_id else row_stored_id
                 }
                 self.data[table_name][i] = updated_row
 
                 return {
                     "success": True,
-                    "row_id": row_id_int,
+                    "row_id": row_stored_id,
                     "row_data": updated_row
                 }
 
@@ -289,7 +300,7 @@ class MockZeroDBClient:
 
         Args:
             table_name: Table name
-            row_id: Row ID to delete
+            row_id: Row ID to delete (can be int or UUID string)
 
         Returns:
             Success response
@@ -299,13 +310,23 @@ class MockZeroDBClient:
         if table_name not in self.data:
             raise ValueError(f"Table {table_name} not found")
 
-        # Find and remove row
-        row_id_int = int(row_id) if isinstance(row_id, str) else row_id
+        # Find and remove row - support both int and UUID string IDs
+        try:
+            row_id_normalized = int(row_id) if isinstance(row_id, str) and row_id.isdigit() else row_id
+        except (ValueError, TypeError):
+            row_id_normalized = row_id
 
         for i, row in enumerate(self.data[table_name]):
-            if row.get("id") == row_id_int or row.get("row_id") == row_id_int:
+            row_stored_id = row.get("id")
+            row_stored_row_id = row.get("row_id")
+
+            # Match on either id or row_id
+            if (row_stored_id == row_id_normalized or
+                row_stored_row_id == row_id_normalized or
+                str(row_stored_id) == str(row_id) or
+                str(row_stored_row_id) == str(row_id)):
                 self.data[table_name].pop(i)
-                return {"success": True, "row_id": row_id_int}
+                return {"success": True, "row_id": row_stored_id}
 
         raise ValueError(f"Row {row_id} not found in table {table_name}")
 
