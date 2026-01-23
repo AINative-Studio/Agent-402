@@ -1,7 +1,7 @@
 require("@nomicfoundation/hardhat-toolbox");
 
 // Load environment variables
-require('dotenv').config({ path: '../.env' });
+require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -19,8 +19,8 @@ module.exports = {
       chainId: 31337
     },
     "arc-testnet": {
-      url: process.env.ARC_TESTNET_RPC_URL || "https://testnet.arc.xyz",
-      chainId: 1994, // Arc testnet chain ID (placeholder - verify actual)
+      url: process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network",
+      chainId: 5042002, // Arc testnet chain ID
       accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
       gas: "auto",
       gasPrice: "auto"
@@ -41,10 +41,10 @@ module.exports = {
     customChains: [
       {
         network: "arc-testnet",
-        chainId: 1994,
+        chainId: 5042002,
         urls: {
-          apiURL: "https://explorer-testnet.arc.xyz/api",
-          browserURL: "https://explorer-testnet.arc.xyz"
+          apiURL: "https://testnet.arcscan.app/api",
+          browserURL: "https://testnet.arcscan.app"
         }
       },
       {

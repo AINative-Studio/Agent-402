@@ -194,7 +194,10 @@ contract ReputationRegistry {
     /**
      * @dev Get reputation summary for an agent
      * @param agentTokenId The agent token ID
-     * @return totalScore, feedbackCount, averageScore, trustTier
+     * @return totalScore Total reputation score
+     * @return feedbackCount Number of feedback submissions
+     * @return averageScore Average score per feedback
+     * @return trustTier Trust tier (0-4)
      */
     function getAgentReputationSummary(uint256 agentTokenId)
         public

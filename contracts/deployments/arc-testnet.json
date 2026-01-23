@@ -1,0 +1,36 @@
+{
+  "network": "arc-testnet",
+  "deployer": "0xaE46bd83DaE6088ef30670C1DBb216c0745B52B0",
+  "timestamp": "2026-01-23T05:49:48.701Z",
+  "contracts": {
+    "AgentRegistry": "0x07788a3E1B816B4e7EB08DbD930Dbf51B0bbc5C2",
+    "ReputationRegistry": "0xC625d3C850d85178c2D93286c6418ab381134744",
+    "AgentTreasury": "0x5f8D59332D3d2af9E4596DC1F4EafD1aC53499DE"
+  },
+  "agents": [
+    {
+      "name": "Analyst Agent",
+      "tokenId": "0",
+      "treasuryId": "1",
+      "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "role": "analyst",
+      "owner": "0xaE46bd83DaE6088ef30670C1DBb216c0745B52B0"
+    },
+    {
+      "name": "Compliance Agent",
+      "tokenId": "1",
+      "treasuryId": "2",
+      "did": "did:key:z6Mki9E8kZT3ybvrYqVqJQrW9vHn6YuVjAVdHqzBGbYQk2Jp",
+      "role": "compliance",
+      "owner": "0xaE46bd83DaE6088ef30670C1DBb216c0745B52B0"
+    },
+    {
+      "name": "Transaction Agent",
+      "tokenId": "2",
+      "treasuryId": "3",
+      "did": "did:key:z6MkkKQ3EbHjE4VPZqL6LS2b4kXy7nZvJqW9vHn6YuVjAVdH",
+      "role": "transaction",
+      "owner": "0xaE46bd83DaE6088ef30670C1DBb216c0745B52B0"
+    }
+  ]
+}
