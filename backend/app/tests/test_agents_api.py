@@ -21,8 +21,8 @@ class TestCreateAgentEndpoint:
         """
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:researcher-01",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnresearcher-01",
+            "role": "analyst",
             "name": "Research Agent Alpha",
             "description": "Specialized agent for financial research and data gathering",
             "scope": "PROJECT"
@@ -58,7 +58,7 @@ class TestCreateAgentEndpoint:
         """
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:analyst-01",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnanalyst-01",
             "role": "analyst",
             "name": "Analysis Agent Beta"
         }
@@ -76,18 +76,18 @@ class TestCreateAgentEndpoint:
         assert data["role"] == request_body["role"]
         assert data["name"] == request_body["name"]
         assert data["description"] is None
-        assert data["scope"] == "PROJECT"  # Default value
+        assert data["scope"] == "RUN"  # Default value
 
     def test_create_agent_different_scopes(self, client, auth_headers_user1):
         """Test creating agents with different scope values."""
         project_id = "proj_demo_u1_001"
 
-        scopes = ["PROJECT", "GLOBAL", "RESTRICTED"]
+        scopes = ["SYSTEM", "PROJECT", "RUN"]
 
         for idx, scope in enumerate(scopes):
             request_body = {
-                "did": f"did:web:agent.example.com:executor-0{idx}",
-                "role": "executor",
+                "did": f"did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnexecutor-0{idx}",
+                "role": "transaction",
                 "name": f"Executor Agent {idx}",
                 "scope": scope
             }
@@ -106,7 +106,7 @@ class TestCreateAgentEndpoint:
         """Test that missing 'did' field returns 422 validation error."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "role": "researcher",
+            "role": "analyst",
             "name": "Research Agent"
         }
 
@@ -122,7 +122,7 @@ class TestCreateAgentEndpoint:
         """Test that missing 'role' field returns 422 validation error."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:test",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnntest",
             "name": "Test Agent"
         }
 
@@ -138,8 +138,8 @@ class TestCreateAgentEndpoint:
         """Test that missing 'name' field returns 422 validation error."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:test",
-            "role": "researcher"
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnntest",
+            "role": "analyst"
         }
 
         response = client.post(
@@ -157,7 +157,7 @@ class TestCreateAgentEndpoint:
         # Empty DID
         response = client.post(
             f"/v1/public/{project_id}/agents",
-            json={"did": "", "role": "researcher", "name": "Test"},
+            json={"did": "", "role": "analyst", "name": "Test"},
             headers=auth_headers_user1
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -165,7 +165,7 @@ class TestCreateAgentEndpoint:
         # Empty role
         response = client.post(
             f"/v1/public/{project_id}/agents",
-            json={"did": "did:test", "role": "", "name": "Test"},
+            json={"did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEmptyRole", "role": "", "name": "Test"},
             headers=auth_headers_user1
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -173,7 +173,7 @@ class TestCreateAgentEndpoint:
         # Empty name
         response = client.post(
             f"/v1/public/{project_id}/agents",
-            json={"did": "did:test", "role": "researcher", "name": ""},
+            json={"did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEmptyName", "role": "analyst", "name": ""},
             headers=auth_headers_user1
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
@@ -185,8 +185,8 @@ class TestCreateAgentEndpoint:
         """
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:duplicate-test",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnduplicate-test",
+            "role": "analyst",
             "name": "Duplicate Test Agent"
         }
 
@@ -216,8 +216,8 @@ class TestCreateAgentEndpoint:
         DID uniqueness is scoped to project.
         """
         request_body = {
-            "did": "did:web:agent.example.com:cross-project",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnncross-project",
+            "role": "analyst",
             "name": "Cross Project Agent"
         }
 
@@ -248,8 +248,8 @@ class TestCreateAgentEndpoint:
         """Test that invalid scope value returns 422 validation error."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:invalid-scope",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnninvalid-scope",
+            "role": "analyst",
             "name": "Invalid Scope Agent",
             "scope": "INVALID_SCOPE"
         }
@@ -265,8 +265,8 @@ class TestCreateAgentEndpoint:
     def test_create_agent_project_not_found(self, client, auth_headers_user1):
         """Test creating agent in non-existent project returns 404."""
         request_body = {
-            "did": "did:web:agent.example.com:test",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnntest",
+            "role": "analyst",
             "name": "Test Agent"
         }
 
@@ -289,8 +289,8 @@ class TestCreateAgentEndpoint:
         # User 2's project
         project_id = "proj_demo_u2_001"
         request_body = {
-            "did": "did:web:agent.example.com:unauthorized",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnunauthorized",
+            "role": "analyst",
             "name": "Unauthorized Agent"
         }
 
@@ -310,8 +310,8 @@ class TestCreateAgentEndpoint:
         """Test missing X-API-Key header returns 401."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:test",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnntest",
+            "role": "analyst",
             "name": "Test Agent"
         }
 
@@ -330,8 +330,8 @@ class TestCreateAgentEndpoint:
         """Test invalid API key returns 401."""
         project_id = "proj_demo_u1_001"
         request_body = {
-            "did": "did:web:agent.example.com:test",
-            "role": "researcher",
+            "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnntest",
+            "role": "analyst",
             "name": "Test Agent"
         }
 
@@ -354,7 +354,7 @@ class TestCreateAgentEndpoint:
             f"/v1/public/{project_id}/agents",
             json={
                 "did": "did:" + "x" * 300,
-                "role": "researcher",
+                "role": "analyst",
                 "name": "Test Agent"
             },
             headers=auth_headers_user1
@@ -365,7 +365,7 @@ class TestCreateAgentEndpoint:
         response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:test",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnFieldValidation",
                 "role": "r" * 150,
                 "name": "Test Agent"
             },
@@ -377,8 +377,8 @@ class TestCreateAgentEndpoint:
         response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnFieldValidation",
+                "role": "analyst",
                 "name": "n" * 250
             },
             headers=auth_headers_user1
@@ -389,8 +389,8 @@ class TestCreateAgentEndpoint:
         response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnFieldValidation",
+                "role": "analyst",
                 "name": "Test Agent",
                 "description": "d" * 1500
             },
@@ -434,18 +434,18 @@ class TestListAgentsEndpoint:
         # Create multiple agents
         agents_to_create = [
             {
-                "did": "did:web:agent.example.com:list-test-01",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnlist-test-01",
+                "role": "analyst",
                 "name": "List Test Agent 1"
             },
             {
-                "did": "did:web:agent.example.com:list-test-02",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnlist-test-02",
                 "role": "analyst",
                 "name": "List Test Agent 2"
             },
             {
-                "did": "did:web:agent.example.com:list-test-03",
-                "role": "executor",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnlist-test-03",
+                "role": "transaction",
                 "name": "List Test Agent 3"
             }
         ]
@@ -483,8 +483,8 @@ class TestListAgentsEndpoint:
         client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:schema-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnschema-test",
+                "role": "analyst",
                 "name": "Schema Test Agent",
                 "description": "Testing schema",
                 "scope": "PROJECT"
@@ -538,8 +538,8 @@ class TestListAgentsEndpoint:
         response1 = client.post(
             "/v1/public/proj_demo_u1_001/agents",
             json={
-                "did": "did:web:agent.example.com:isolation-test-1",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnisolation-test-1",
+                "role": "analyst",
                 "name": "Isolation Test Agent 1"
             },
             headers=auth_headers_user1
@@ -551,7 +551,7 @@ class TestListAgentsEndpoint:
         response2 = client.post(
             "/v1/public/proj_demo_u1_002/agents",
             json={
-                "did": "did:web:agent.example.com:isolation-test-2",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnisolation-test-2",
                 "role": "analyst",
                 "name": "Isolation Test Agent 2"
             },
@@ -650,11 +650,11 @@ class TestGetSingleAgentEndpoint:
         create_response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:get-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnget-test",
+                "role": "analyst",
                 "name": "Get Test Agent",
                 "description": "Agent for testing GET endpoint",
-                "scope": "GLOBAL"
+                "scope": "SYSTEM"
             },
             headers=auth_headers_user1
         )
@@ -689,7 +689,7 @@ class TestGetSingleAgentEndpoint:
         create_response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:schema-get-test",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnschema-get-test",
                 "role": "analyst",
                 "name": "Schema GET Test Agent"
             },
@@ -747,8 +747,8 @@ class TestGetSingleAgentEndpoint:
         create_response = client.post(
             "/v1/public/proj_demo_u1_001/agents",
             json={
-                "did": "did:web:agent.example.com:wrong-project-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnwrong-project-test",
+                "role": "analyst",
                 "name": "Wrong Project Test Agent"
             },
             headers=auth_headers_user1
@@ -838,8 +838,8 @@ class TestAgentsAPIIntegration:
         create_response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:lifecycle-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnlifecycle-test",
+                "role": "analyst",
                 "name": "Lifecycle Test Agent",
                 "description": "Full lifecycle test"
             },
@@ -882,22 +882,22 @@ class TestAgentsAPIIntegration:
 
         agents_config = [
             {
-                "did": "did:web:agent.example.com:multi-researcher",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnmulti-researcher",
+                "role": "analyst",
                 "name": "Multi Researcher Agent",
                 "scope": "PROJECT"
             },
             {
-                "did": "did:web:agent.example.com:multi-analyst",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnmulti-analyst",
                 "role": "analyst",
                 "name": "Multi Analyst Agent",
-                "scope": "GLOBAL"
+                "scope": "SYSTEM"
             },
             {
-                "did": "did:web:agent.example.com:multi-executor",
-                "role": "executor",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnmulti-executor",
+                "role": "transaction",
                 "name": "Multi Executor Agent",
-                "scope": "RESTRICTED"
+                "scope": "RUN"
             }
         ]
 
@@ -939,8 +939,8 @@ class TestAgentsAPIIntegration:
         response1 = client.post(
             "/v1/public/proj_demo_u1_001/agents",
             json={
-                "did": "did:web:agent.example.com:user1-agent",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnuser1-agent",
+                "role": "analyst",
                 "name": "User 1 Agent"
             },
             headers=auth_headers_user1
@@ -951,7 +951,7 @@ class TestAgentsAPIIntegration:
         response2 = client.post(
             "/v1/public/proj_demo_u2_001/agents",
             json={
-                "did": "did:web:agent.example.com:user2-agent",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnuser2-agent",
                 "role": "analyst",
                 "name": "User 2 Agent"
             },
@@ -1020,8 +1020,8 @@ class TestAgentsAPIIntegration:
         client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:duplicate-format-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnduplicate-format-test",
+                "role": "analyst",
                 "name": "Test"
             },
             headers=auth_headers_user1
@@ -1029,8 +1029,8 @@ class TestAgentsAPIIntegration:
         response = client.post(
             f"/v1/public/{project_id}/agents",
             json={
-                "did": "did:web:agent.example.com:duplicate-format-test",
-                "role": "researcher",
+                "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnduplicate-format-test",
+                "role": "analyst",
                 "name": "Test"
             },
             headers=auth_headers_user1
@@ -1042,7 +1042,7 @@ class TestAgentsAPIIntegration:
         # 422 - Validation error
         response = client.post(
             f"/v1/public/{project_id}/agents",
-            json={"role": "researcher"},  # Missing required fields
+            json={"role": "analyst"},  # Missing required fields
             headers=auth_headers_user1
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
