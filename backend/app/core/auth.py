@@ -13,6 +13,7 @@ from app.core.jwt import (
     TokenExpiredError,
     InvalidJWTError
 )
+from app.core.ainative_auth import validate_ainative_token_sync
 
 
 async def verify_api_key(
@@ -103,6 +104,12 @@ async def get_current_user(
     if authorization:
         token = extract_token_from_header(authorization)
         if token:
+            # Try AINative token validation first
+            ainative_user = validate_ainative_token_sync(token)
+            if ainative_user:
+                return ainative_user.user_id
+
+            # Fall back to local JWT validation
             try:
                 token_data = decode_access_token(token)
                 return token_data.user_id

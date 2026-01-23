@@ -26,6 +26,7 @@ from app.core.jwt import (
     TokenExpiredError,
     InvalidJWTError
 )
+from app.core.ainative_auth import validate_ainative_token
 import logging
 
 logger = logging.getLogger(__name__)
@@ -191,11 +192,23 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if authorization:
             token = extract_token_from_header(authorization)
             if token:
+                # Try AINative token validation first (for tokens from AINative Studio)
+                ainative_user = await validate_ainative_token(token)
+                if ainative_user:
+                    logger.debug(
+                        f"Authenticated via AINative JWT: {path}",
+                        extra={"path": path, "user_id": ainative_user.user_id, "auth_method": "ainative_jwt"}
+                    )
+                    # Store full user info in request state for later use
+                    request.state.ainative_user = ainative_user
+                    return ainative_user.user_id
+
+                # Fall back to local JWT validation (for locally-issued tokens)
                 try:
                     token_data = decode_access_token(token)
                     logger.debug(
-                        f"Authenticated via JWT: {path}",
-                        extra={"path": path, "user_id": token_data.user_id, "auth_method": "jwt"}
+                        f"Authenticated via local JWT: {path}",
+                        extra={"path": path, "user_id": token_data.user_id, "auth_method": "local_jwt"}
                     )
                     return token_data.user_id
                 except TokenExpiredError:
