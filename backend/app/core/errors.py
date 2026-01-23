@@ -746,6 +746,79 @@ class ZeroDBError(APIError):
         )
 
 
+# Issue #123: Enhanced Projects API errors
+
+
+class AgentAlreadyAssociatedError(APIError):
+    """
+    Raised when attempting to associate an agent that is already associated.
+
+    Issue #123: Project-agent associations.
+
+    Returns:
+        - HTTP 409 (Conflict)
+        - error_code: AGENT_ALREADY_ASSOCIATED
+        - detail: Message about duplicate association
+    """
+
+    def __init__(self, agent_did: str, project_id: str):
+        detail = f"Agent '{agent_did}' is already associated with project '{project_id}'"
+        super().__init__(
+            status_code=status.HTTP_409_CONFLICT,
+            error_code="AGENT_ALREADY_ASSOCIATED",
+            detail=detail
+        )
+        self.agent_did = agent_did
+        self.project_id = project_id
+
+
+class AgentNotAssociatedError(APIError):
+    """
+    Raised when attempting to disassociate an agent that is not associated.
+
+    Issue #123: Project-agent associations.
+
+    Returns:
+        - HTTP 404 (Not Found)
+        - error_code: AGENT_NOT_ASSOCIATED
+        - detail: Message about missing association
+    """
+
+    def __init__(self, agent_did: str, project_id: str):
+        detail = f"Agent '{agent_did}' is not associated with project '{project_id}'"
+        super().__init__(
+            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="AGENT_NOT_ASSOCIATED",
+            detail=detail
+        )
+        self.agent_did = agent_did
+        self.project_id = project_id
+
+
+class InvalidProjectStatusError(APIError):
+    """
+    Raised when an invalid project status is provided.
+
+    Issue #123: Project status workflow.
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: INVALID_PROJECT_STATUS
+        - detail: Message about invalid status
+    """
+
+    def __init__(self, status_value: str, valid_statuses: list):
+        valid_str = ", ".join(valid_statuses) if valid_statuses else "unknown"
+        detail = f"Invalid project status '{status_value}'. Valid statuses: {valid_str}"
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="INVALID_PROJECT_STATUS",
+            detail=detail
+        )
+        self.status_value = status_value
+        self.valid_statuses = valid_statuses
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

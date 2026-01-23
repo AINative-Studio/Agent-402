@@ -24,9 +24,9 @@ class TestListProjectsEndpoint:
         assert isinstance(data["projects"], list)
         assert isinstance(data["total"], int)
 
-        # User 1 has 2 projects
-        assert data["total"] == 2
-        assert len(data["projects"]) == 2
+        # User 1 has 3 projects (UUID project, legacy proj_demo_u1_001, proj_demo_u1_002)
+        assert data["total"] == 3
+        assert len(data["projects"]) == 3
 
         # Verify project structure
         for project in data["projects"]:
@@ -129,8 +129,8 @@ class TestListProjectsEndpoint:
 
         data = response.json()
         for project in data["projects"]:
-            # Status must be a valid enum value
-            assert project["status"] in ["ACTIVE", "INACTIVE", "SUSPENDED"]
+            # Status must be a valid enum value (Issue #123: Added DRAFT, COMPLETED, ARCHIVED)
+            assert project["status"] in ["DRAFT", "ACTIVE", "INACTIVE", "SUSPENDED", "COMPLETED", "ARCHIVED"]
 
     def test_list_projects_tier_values(self, client, auth_headers_user1):
         """
