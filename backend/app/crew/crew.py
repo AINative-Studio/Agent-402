@@ -2,10 +2,16 @@
 Main CrewAI orchestration for Agent-402.
 
 Implements Epic 12 Story 1: Sequential 3-agent workflow with memory persistence.
+Implements Issues #117 + #118: Enhanced orchestration with error handling and retries.
+
 Process: Analyst -> Compliance -> Transaction
 
-Each agent stores outputs in agent_memory with proper metadata.
-Final output includes X402 request_id.
+Features:
+- Each agent stores outputs in agent_memory with proper metadata
+- Error handling with structured error responses
+- Retry logic for transient failures
+- Crew-level memory sharing via consistent run_id
+- Final output includes X402 request_id
 """
 import logging
 import uuid
