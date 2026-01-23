@@ -10,9 +10,12 @@ from typing import Optional
 
 class ProjectStatus(str, Enum):
     """Project status enumeration."""
+    DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     SUSPENDED = "SUSPENDED"
+    COMPLETED = "COMPLETED"
+    ARCHIVED = "ARCHIVED"
 
 
 class ProjectTier(str, Enum):

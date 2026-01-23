@@ -24,8 +24,8 @@ class TestProjectService:
         user1_projects = service.list_user_projects("user_1")
         user2_projects = service.list_user_projects("user_2")
 
-        # User 1 should have 2 projects
-        assert len(user1_projects) == 2
+        # User 1 has 3 projects (UUID project, legacy proj_demo_u1_001, proj_demo_u1_002)
+        assert len(user1_projects) == 3
         for project in user1_projects:
             assert project.user_id == "user_1"
 
@@ -76,6 +76,7 @@ class TestProjectService:
 
     def test_count_user_projects(self, service):
         """Test count_user_projects returns correct count."""
-        assert service.count_user_projects("user_1") == 2
+        # User 1 has 3 projects (UUID project, legacy proj_demo_u1_001, proj_demo_u1_002)
+        assert service.count_user_projects("user_1") == 3
         assert service.count_user_projects("user_2") == 3
         assert service.count_user_projects("unknown_user") == 0
