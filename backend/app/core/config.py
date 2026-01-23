@@ -75,6 +75,24 @@ class Settings(BaseSettings):
         description="Circle API base URL (sandbox for testing)"
     )
 
+    # Gemini AI Configuration (Issue #115)
+    gemini_api_key: str = Field(
+        default="test_gemini_api_key_change_in_production",
+        description="Google Gemini API key"
+    )
+    gemini_pro_model: str = Field(
+        default="gemini-pro",
+        description="Gemini Pro model for deep analysis"
+    )
+    gemini_flash_model: str = Field(
+        default="gemini-1.5-flash",
+        description="Gemini Flash model for fast execution"
+    )
+    llm_provider: str = Field(
+        default="gemini",
+        description="LLM provider to use (gemini, openai, anthropic)"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

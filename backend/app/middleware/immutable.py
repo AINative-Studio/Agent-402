@@ -315,6 +315,12 @@ class ImmutableMiddleware(BaseHTTPMiddleware):
         "/x402-requests",
     ]
 
+    # Issue #123: Paths that are allowed even if they match immutable patterns
+    # Project agent associations are NOT the agents table - they are relationship records
+    ALLOWED_PATH_PATTERNS: List[str] = [
+        "/projects/",  # Project agent associations (e.g., /projects/xyz/agents/did:...)
+    ]
+
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """
         Intercept and validate requests to immutable table endpoints.
@@ -328,6 +334,12 @@ class ImmutableMiddleware(BaseHTTPMiddleware):
         """
         path = request.url.path.lower()
         method = request.method.upper()
+
+        # Issue #123: Skip immutability check for allowed paths
+        # Project agent associations are not the agents table
+        for allowed in self.ALLOWED_PATH_PATTERNS:
+            if allowed in path:
+                return await call_next(request)
 
         # Check if this is a mutating request to an immutable table
         if method in MUTATING_METHODS:
