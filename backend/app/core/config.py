@@ -79,6 +79,10 @@ class Settings(BaseSettings):
         default="",
         description="Circle entity secret (32-byte hex string). Auto-generated if not provided."
     )
+    circle_wallet_set_id: str = Field(
+        default="",
+        description="Circle wallet set ID for agent wallets. If empty, a new one will be created."
+    )
 
     @field_validator('circle_entity_secret', mode='before')
     @classmethod

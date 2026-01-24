@@ -120,6 +120,7 @@ class CircleWalletService:
         Get or create a wallet set for the project.
 
         Each project has one wallet set that contains all agent wallets.
+        If circle_wallet_set_id is configured in settings, use it directly.
 
         Args:
             project_id: Project identifier
@@ -127,7 +128,13 @@ class CircleWalletService:
         Returns:
             Wallet set ID (Circle's UUID)
         """
-        # Check if we already have a wallet set for this project
+        # First, check if wallet set ID is configured in settings
+        from app.core.config import settings
+        if settings.circle_wallet_set_id:
+            logger.debug(f"Using configured wallet set ID: {settings.circle_wallet_set_id}")
+            return settings.circle_wallet_set_id
+
+        # Check if we already have a wallet set for this project in ZeroDB
         try:
             result = await self.client.query_rows(
                 WALLET_SETS_TABLE,
