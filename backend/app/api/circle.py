@@ -22,6 +22,8 @@ from app.schemas.circle import (
     TransferCreateRequest,
     TransferResponse,
     TransferListResponse,
+    AgentPaymentRequest,
+    AgentPaymentResponse,
     ErrorResponse,
     WalletType,
     WalletStatus,
@@ -573,4 +575,191 @@ async def get_transfer(
         created_at=datetime.fromisoformat(transfer["created_at"].replace("Z", "+00:00")),
         completed_at=datetime.fromisoformat(transfer["completed_at"].replace("Z", "+00:00")) if transfer.get("completed_at") else None,
         metadata=transfer.get("metadata")
+    )
+
+
+@router.post(
+    "/{project_id}/agents/{agent_id}/pay",
+    response_model=AgentPaymentResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {
+            "description": "Payment initiated successfully",
+            "model": AgentPaymentResponse
+        },
+        400: {
+            "description": "Invalid payment request or insufficient funds",
+            "model": ErrorResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        403: {
+            "description": "Not authorized to access project",
+            "model": ErrorResponse
+        },
+        404: {
+            "description": "Agent or wallet not found",
+            "model": ErrorResponse
+        },
+        422: {
+            "description": "Validation error",
+            "model": ErrorResponse
+        }
+    },
+    summary="Pay an agent for task completion",
+    description="""
+    Initiate a USDC payment to an agent from the platform treasury.
+
+    **Authentication:** Requires X-API-Key header
+
+    This endpoint transfers USDC from the platform treasury wallet to the
+    specified agent's Circle wallet as payment for completed tasks.
+
+    **Required fields:**
+    - amount: Payment amount in USDC (e.g., "10.00")
+    - reason: Reason for the payment (e.g., "Task completion payment")
+
+    **Optional fields:**
+    - task_id: Reference to the completed task
+    - idempotency_key: Key for retry safety
+
+    **Process:**
+    1. Looks up the agent's Circle wallet by agent_id
+    2. Gets the platform treasury wallet as payment source
+    3. Initiates USDC transfer from treasury to agent
+    4. Records payment in ZeroDB for audit trail
+
+    **Returns:**
+    - payment_id: Unique payment identifier
+    - transfer_id: Associated Circle transfer ID
+    - status: Payment status (pending, complete, failed)
+    - transaction_hash: Blockchain hash when complete
+    """
+)
+async def pay_agent(
+    project_id: str,
+    agent_id: str,
+    request: AgentPaymentRequest,
+    current_user: str = Depends(get_current_user)
+) -> AgentPaymentResponse:
+    """
+    Pay an agent for task completion.
+
+    Args:
+        project_id: Project identifier from URL
+        agent_id: Agent identifier from URL
+        request: Payment request body
+        current_user: User ID from X-API-Key authentication
+
+    Returns:
+        AgentPaymentResponse with payment details
+    """
+    validate_project_access(project_id, current_user)
+
+    payment = await circle_wallet_service.pay_agent(
+        project_id=project_id,
+        agent_id=agent_id,
+        amount=request.amount,
+        reason=request.reason,
+        task_id=request.task_id,
+        idempotency_key=request.idempotency_key
+    )
+
+    return AgentPaymentResponse(
+        payment_id=payment["payment_id"],
+        agent_id=payment["agent_id"],
+        agent_did=payment["agent_did"],
+        amount=payment["amount"],
+        currency=payment.get("currency", "USD"),
+        reason=payment["reason"],
+        task_id=payment.get("task_id"),
+        transfer_id=payment["transfer_id"],
+        circle_transfer_id=payment["circle_transfer_id"],
+        status=TransferStatus(payment["status"]),
+        transaction_hash=payment.get("transaction_hash"),
+        source_wallet_id=payment["source_wallet_id"],
+        destination_wallet_id=payment["destination_wallet_id"],
+        created_at=datetime.fromisoformat(payment["created_at"].replace("Z", "+00:00")),
+        completed_at=datetime.fromisoformat(payment["completed_at"].replace("Z", "+00:00")) if payment.get("completed_at") else None
+    )
+
+
+@router.get(
+    "/{project_id}/agents/{agent_id}/payments/{payment_id}",
+    response_model=AgentPaymentResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Successfully retrieved payment",
+            "model": AgentPaymentResponse
+        },
+        401: {
+            "description": "Invalid or missing API key",
+            "model": ErrorResponse
+        },
+        403: {
+            "description": "Not authorized to access project",
+            "model": ErrorResponse
+        },
+        404: {
+            "description": "Payment not found",
+            "model": ErrorResponse
+        }
+    },
+    summary="Get agent payment by ID",
+    description="""
+    Get an agent payment by ID.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Returns:**
+    - Full payment details including current status
+    - transaction_hash when payment is complete
+    """
+)
+async def get_agent_payment(
+    project_id: str,
+    agent_id: str,
+    payment_id: str,
+    current_user: str = Depends(get_current_user)
+) -> AgentPaymentResponse:
+    """
+    Get a single agent payment by ID.
+
+    Args:
+        project_id: Project identifier from URL
+        agent_id: Agent identifier from URL (for validation)
+        payment_id: Payment identifier from URL
+        current_user: User ID from X-API-Key authentication
+
+    Returns:
+        AgentPaymentResponse with payment details
+    """
+    validate_project_access(project_id, current_user)
+
+    payment = await circle_wallet_service.get_agent_payment(payment_id, project_id)
+
+    # Validate that the payment belongs to the specified agent
+    if payment.get("agent_id") != agent_id:
+        from app.services.circle_service import TransferNotFoundError
+        raise TransferNotFoundError(payment_id)
+
+    return AgentPaymentResponse(
+        payment_id=payment["payment_id"],
+        agent_id=payment["agent_id"],
+        agent_did=payment["agent_did"],
+        amount=payment["amount"],
+        currency=payment.get("currency", "USD"),
+        reason=payment["reason"],
+        task_id=payment.get("task_id"),
+        transfer_id=payment["transfer_id"],
+        circle_transfer_id=payment["circle_transfer_id"],
+        status=TransferStatus(payment["status"]),
+        transaction_hash=payment.get("transaction_hash"),
+        source_wallet_id=payment["source_wallet_id"],
+        destination_wallet_id=payment["destination_wallet_id"],
+        created_at=datetime.fromisoformat(payment["created_at"].replace("Z", "+00:00")),
+        completed_at=datetime.fromisoformat(payment["completed_at"].replace("Z", "+00:00")) if payment.get("completed_at") else None
     )

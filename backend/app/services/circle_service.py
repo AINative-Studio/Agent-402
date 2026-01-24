@@ -5,6 +5,7 @@ Implements Circle API client for USDC wallet and transfer operations.
 Issue #114: Implement Circle Wallets and USDC Payments
 
 This service handles:
+- Wallet set creation via Circle API
 - Wallet creation via Circle API
 - Wallet balance retrieval
 - USDC transfer operations
@@ -18,20 +19,33 @@ Security:
 - API key is stored securely (never logged)
 - All requests use HTTPS
 - Idempotency keys prevent duplicate operations
+- Entity secret is encrypted using Circle's public key
+
+API Documentation:
+- Base URL: https://api.circle.com
+- Auth: Bearer token with format PREFIX:ID:SECRET
+- Blockchain: ARC-TESTNET for testnet operations
 """
 import uuid
 import logging
 import httpx
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.core.errors import APIError
+from app.services.circle_crypto import (
+    generate_entity_secret_ciphertext,
+    CircleCryptoError
+)
 
 logger = logging.getLogger(__name__)
 
 # Circle API Configuration
-CIRCLE_SANDBOX_URL = "https://api-sandbox.circle.com"
 CIRCLE_PRODUCTION_URL = "https://api.circle.com"
+CIRCLE_SANDBOX_URL = "https://api-sandbox.circle.com"
+
+# Default blockchain for testnet operations
+DEFAULT_BLOCKCHAIN = "ARC-TESTNET"
 
 
 class CircleAPIError(APIError):
@@ -130,6 +144,7 @@ class CircleService:
     Circle API client service.
 
     Handles direct communication with Circle's API for:
+    - Wallet set creation
     - Wallet creation and management
     - Balance queries
     - Transfer operations
@@ -148,11 +163,11 @@ class CircleService:
 
         Args:
             api_key: Circle API key (required)
-            base_url: Optional custom base URL (defaults to sandbox)
-            entity_secret: Entity secret for signing operations
+            base_url: Optional custom base URL (defaults to production)
+            entity_secret: Entity secret for signing operations (32-byte hex string)
         """
         self.api_key = api_key
-        self.base_url = base_url or CIRCLE_SANDBOX_URL
+        self.base_url = base_url or CIRCLE_PRODUCTION_URL
         self.entity_secret = entity_secret
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -169,6 +184,36 @@ class CircleService:
                 timeout=30.0
             )
         return self._client
+
+    async def _get_entity_secret_ciphertext(self) -> str:
+        """
+        Generate a fresh entity secret ciphertext for API requests.
+
+        Returns:
+            Base64-encoded entity secret ciphertext
+
+        Raises:
+            CircleAPIError: If ciphertext generation fails
+        """
+        if not self.entity_secret:
+            raise CircleAPIError(
+                "Entity secret not configured. Set circle_entity_secret in config.",
+                status_code=500
+            )
+
+        try:
+            ciphertext = await generate_entity_secret_ciphertext(
+                entity_secret_hex=self.entity_secret,
+                api_key=self.api_key,
+                base_url=self.base_url
+            )
+            return ciphertext
+        except CircleCryptoError as e:
+            logger.error(f"Failed to generate entity secret ciphertext: {e.message}")
+            raise CircleAPIError(
+                f"Entity secret encryption failed: {e.message}",
+                status_code=500
+            )
 
     async def _make_request(
         self,
@@ -206,8 +251,10 @@ class CircleService:
                 # Determine if it's a wallet or transfer not found
                 if "wallet" in endpoint.lower():
                     wallet_id = endpoint.split("/")[-1]
+                    if "/balances" in endpoint:
+                        wallet_id = endpoint.split("/")[-2]
                     raise WalletNotFoundError(wallet_id)
-                elif "transfer" in endpoint.lower():
+                elif "transaction" in endpoint.lower():
                     transfer_id = endpoint.split("/")[-1]
                     raise TransferNotFoundError(transfer_id)
 
@@ -228,191 +275,370 @@ class CircleService:
             logger.error(f"Unexpected error in Circle API request: {e}")
             raise CircleAPIError(f"Unexpected error: {str(e)}", 500)
 
+    async def create_wallet_set(
+        self,
+        idempotency_key: str,
+        name: str = None
+    ) -> Dict[str, Any]:
+        """
+        Create a new wallet set.
+
+        A wallet set groups related wallets together. Each entity can have
+        up to 1,000 wallet sets, with each set supporting up to 10 million wallets.
+
+        Args:
+            idempotency_key: Unique key for idempotent creation (UUID v4)
+            name: Optional name for the wallet set
+
+        Returns:
+            Dict containing wallet set details:
+            - id: Wallet set identifier
+            - custodyType: DEVELOPER or ENDUSER
+            - createDate: ISO-8601 timestamp
+            - updateDate: ISO-8601 timestamp
+
+        Raises:
+            CircleAPIError: If wallet set creation fails
+        """
+        logger.info(f"Creating Circle wallet set with idempotency key: {idempotency_key}")
+
+        ciphertext = await self._get_entity_secret_ciphertext()
+
+        request_data = {
+            "entitySecretCiphertext": ciphertext,
+            "idempotencyKey": idempotency_key
+        }
+
+        if name:
+            request_data["name"] = name
+
+        result = await self._make_request(
+            method="POST",
+            endpoint="/v1/w3s/developer/walletSets",
+            data=request_data
+        )
+
+        logger.info(f"Created wallet set: {result.get('data', {}).get('walletSet', {}).get('id')}")
+        return result
+
     async def create_wallet(
         self,
         idempotency_key: str,
-        blockchain: str = "ETH-SEPOLIA",
-        wallet_set_id: str = None
+        blockchain: str = DEFAULT_BLOCKCHAIN,
+        wallet_set_id: str = None,
+        count: int = 1,
+        metadata: List[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         Create a new Circle wallet.
 
         Args:
-            idempotency_key: Unique key for idempotent creation
-            blockchain: Target blockchain (default: ETH-SEPOLIA for testnet)
-            wallet_set_id: Optional wallet set ID for grouping
+            idempotency_key: Unique key for idempotent creation (UUID v4)
+            blockchain: Target blockchain (default: ARC-TESTNET)
+            wallet_set_id: Required wallet set ID for grouping
+            count: Number of wallets to create (1-200, default: 1)
+            metadata: Optional list of metadata dicts with name/refId
 
         Returns:
             Dict containing wallet details:
-            - walletId: Circle wallet identifier
-            - address: Blockchain address
-            - blockchain: Target blockchain
-            - state: Wallet state (LIVE, etc.)
+            - wallets: List of created wallet objects, each with:
+              - id: Wallet identifier (UUID)
+              - address: Blockchain address
+              - blockchain: Target blockchain
+              - state: Wallet state (LIVE, FROZEN)
+              - walletSetId: Parent wallet set ID
+              - createDate: ISO-8601 timestamp
+
+        Raises:
+            CircleAPIError: If wallet creation fails
         """
-        # For sandbox/testing, we simulate wallet creation
-        # In production, this would call the actual Circle API
-        logger.info(f"Creating Circle wallet with idempotency key: {idempotency_key}")
+        logger.info(
+            f"Creating Circle wallet(s) with idempotency key: {idempotency_key}, "
+            f"blockchain: {blockchain}, count: {count}"
+        )
 
-        # Simulated response for testing/sandbox
-        # In production: return await self._make_request("POST", "/v1/w3s/wallets", {...})
-        wallet_id = f"circle_wlt_{uuid.uuid4().hex[:12]}"
-        address = f"0x{uuid.uuid4().hex}"
+        if not wallet_set_id:
+            raise CircleAPIError(
+                "wallet_set_id is required for wallet creation",
+                status_code=400
+            )
 
-        return {
-            "data": {
-                "walletId": wallet_id,
-                "entityId": f"entity_{uuid.uuid4().hex[:8]}",
-                "blockchain": blockchain,
-                "address": address,
-                "state": "LIVE",
-                "createDate": datetime.utcnow().isoformat() + "Z"
-            }
+        ciphertext = await self._get_entity_secret_ciphertext()
+
+        request_data = {
+            "entitySecretCiphertext": ciphertext,
+            "idempotencyKey": idempotency_key,
+            "blockchains": [blockchain],
+            "walletSetId": wallet_set_id,
+            "count": count
         }
+
+        if metadata:
+            request_data["metadata"] = metadata
+
+        result = await self._make_request(
+            method="POST",
+            endpoint="/v1/w3s/developer/wallets",
+            data=request_data
+        )
+
+        wallets = result.get("data", {}).get("wallets", [])
+        wallet_ids = [w.get("id") for w in wallets]
+        logger.info(f"Created wallet(s): {wallet_ids}")
+
+        return result
 
     async def get_wallet(self, wallet_id: str) -> Dict[str, Any]:
         """
         Get wallet details by Circle wallet ID.
 
         Args:
-            wallet_id: Circle wallet identifier
+            wallet_id: Circle wallet identifier (UUID)
 
         Returns:
             Dict containing wallet details
 
         Raises:
             WalletNotFoundError: If wallet not found
+            CircleAPIError: If API call fails
         """
         logger.info(f"Getting Circle wallet: {wallet_id}")
 
-        # Simulated response for testing/sandbox
-        # In production: return await self._make_request("GET", f"/v1/w3s/wallets/{wallet_id}")
-        if wallet_id.startswith("circle_wlt_"):
-            return {
-                "data": {
-                    "walletId": wallet_id,
-                    "blockchain": "ETH-SEPOLIA",
-                    "address": f"0x{uuid.uuid4().hex}",
-                    "state": "LIVE"
-                }
-            }
-        else:
-            raise WalletNotFoundError(wallet_id)
+        result = await self._make_request(
+            method="GET",
+            endpoint=f"/v1/w3s/wallets/{wallet_id}"
+        )
+
+        return result
 
     async def get_wallet_balance(self, wallet_id: str) -> Dict[str, Any]:
         """
         Get USDC balance for a wallet.
 
         Args:
-            wallet_id: Circle wallet identifier
+            wallet_id: Circle wallet identifier (UUID)
 
         Returns:
             Dict containing balance information:
-            - amount: Balance amount as string
-            - currency: Currency code (USDC)
+            - data.tokenBalances: List of token balance objects, each with:
+              - token: Token details (id, name, symbol, blockchain)
+              - amount: Balance amount as string
+              - updateDate: ISO-8601 timestamp
+            - amount: Convenience field with first token balance
+            - currency: Currency code (e.g., "USDC")
+
+        Raises:
+            WalletNotFoundError: If wallet not found
+            CircleAPIError: If API call fails
         """
         logger.info(f"Getting wallet balance: {wallet_id}")
 
-        # Simulated response for testing/sandbox
-        # In production: return await self._make_request("GET", f"/v1/w3s/wallets/{wallet_id}/balances")
-        return {
-            "data": {
-                "tokenBalances": [
-                    {
-                        "token": {
-                            "symbol": "USDC",
-                            "name": "USD Coin"
-                        },
-                        "amount": "1000.00"
-                    }
-                ]
-            },
-            "amount": "1000.00",
-            "currency": "USDC"
-        }
+        result = await self._make_request(
+            method="GET",
+            endpoint=f"/v1/w3s/wallets/{wallet_id}/balances"
+        )
+
+        # Add convenience fields for easier access
+        token_balances = result.get("data", {}).get("tokenBalances", [])
+        if token_balances:
+            first_balance = token_balances[0]
+            result["amount"] = first_balance.get("amount", "0")
+            result["currency"] = first_balance.get("token", {}).get("symbol", "USDC")
+        else:
+            result["amount"] = "0"
+            result["currency"] = "USDC"
+
+        return result
 
     async def create_transfer(
         self,
         source_wallet_id: str,
-        destination_wallet_id: str,
+        destination_address: str,
         amount: str,
         idempotency_key: str,
-        currency: str = "USD"
+        blockchain: str = DEFAULT_BLOCKCHAIN,
+        token_address: str = None,
+        fee_level: str = "MEDIUM"
     ) -> Dict[str, Any]:
         """
-        Create a USDC transfer between wallets.
+        Create a USDC transfer from a wallet.
 
         Args:
-            source_wallet_id: Source Circle wallet ID
-            destination_wallet_id: Destination Circle wallet ID
+            source_wallet_id: Source Circle wallet ID (UUID)
+            destination_address: Destination blockchain address
             amount: Transfer amount as string (e.g., "100.00")
-            idempotency_key: Unique key for idempotent transfer
-            currency: Currency code (default: USD for USDC)
+            idempotency_key: Unique key for idempotent transfer (UUID v4)
+            blockchain: Target blockchain (default: ARC-TESTNET)
+            token_address: Optional token contract address (for non-native tokens)
+            fee_level: Transaction fee level (LOW, MEDIUM, HIGH)
 
         Returns:
             Dict containing transfer details:
-            - transferId: Circle transfer identifier
-            - status: Transfer status (pending, complete, failed)
-            - transactionHash: Blockchain transaction hash (when complete)
+            - data.id: Transaction identifier (UUID)
+            - data.state: Transaction state (INITIATED, SENT, CONFIRMED, COMPLETE, FAILED)
 
         Raises:
             InsufficientFundsError: If source wallet has insufficient funds
+            WalletNotFoundError: If source wallet not found
+            CircleAPIError: If transfer creation fails
         """
         logger.info(
-            f"Creating transfer: {source_wallet_id} -> {destination_wallet_id}, "
-            f"amount: {amount} {currency}"
+            f"Creating transfer: wallet {source_wallet_id} -> {destination_address}, "
+            f"amount: {amount}, blockchain: {blockchain}"
         )
 
-        # Simulated response for testing/sandbox
-        # In production: return await self._make_request("POST", "/v1/w3s/transfers", {...})
-        transfer_id = f"circle_xfr_{uuid.uuid4().hex[:12]}"
+        ciphertext = await self._get_entity_secret_ciphertext()
 
-        return {
-            "data": {
-                "transferId": transfer_id,
-                "source": {
-                    "type": "wallet",
-                    "id": source_wallet_id
-                },
-                "destination": {
-                    "type": "wallet",
-                    "id": destination_wallet_id
-                },
-                "amount": {
-                    "amount": amount,
-                    "currency": currency
-                },
-                "status": "pending",
-                "createDate": datetime.utcnow().isoformat() + "Z"
-            }
+        request_data = {
+            "entitySecretCiphertext": ciphertext,
+            "idempotencyKey": idempotency_key,
+            "walletId": source_wallet_id,
+            "destinationAddress": destination_address,
+            "blockchain": blockchain,
+            "amounts": [amount],
+            "feeLevel": fee_level
         }
+
+        # Add token address if specified (for non-native tokens)
+        if token_address:
+            request_data["tokenAddress"] = token_address
+
+        try:
+            result = await self._make_request(
+                method="POST",
+                endpoint="/v1/w3s/developer/transactions/transfer",
+                data=request_data
+            )
+        except CircleAPIError as e:
+            # Check if this is an insufficient funds error
+            if "insufficient" in e.detail.lower():
+                raise InsufficientFundsError(source_wallet_id, amount, "unknown")
+            raise
+
+        transfer_id = result.get("data", {}).get("id")
+        state = result.get("data", {}).get("state")
+        logger.info(f"Created transfer: {transfer_id}, state: {state}")
+
+        return result
 
     async def get_transfer(self, transfer_id: str) -> Dict[str, Any]:
         """
         Get transfer details and status.
 
         Args:
-            transfer_id: Circle transfer identifier
+            transfer_id: Circle transaction identifier (UUID)
 
         Returns:
-            Dict containing transfer details
+            Dict containing transfer details:
+            - data.id: Transaction ID
+            - data.state: Transaction state
+            - data.transactionHash: Blockchain transaction hash (when complete)
+            - data.amounts: Transfer amounts
+            - data.sourceAddress: Source wallet address
+            - data.destinationAddress: Destination address
 
         Raises:
             TransferNotFoundError: If transfer not found
+            CircleAPIError: If API call fails
         """
         logger.info(f"Getting transfer status: {transfer_id}")
 
-        # Simulated response for testing/sandbox
-        # In production: return await self._make_request("GET", f"/v1/w3s/transfers/{transfer_id}")
-        if transfer_id.startswith("circle_xfr_"):
-            return {
-                "data": {
-                    "transferId": transfer_id,
-                    "status": "complete",
-                    "transactionHash": f"0x{uuid.uuid4().hex}"
-                }
-            }
-        else:
-            raise TransferNotFoundError(transfer_id)
+        result = await self._make_request(
+            method="GET",
+            endpoint=f"/v1/w3s/transactions/{transfer_id}"
+        )
+
+        return result
+
+    async def list_wallets(
+        self,
+        wallet_set_id: str = None,
+        blockchain: str = None,
+        page_size: int = 50,
+        page_before: str = None,
+        page_after: str = None
+    ) -> Dict[str, Any]:
+        """
+        List wallets with optional filtering.
+
+        Args:
+            wallet_set_id: Filter by wallet set ID
+            blockchain: Filter by blockchain
+            page_size: Number of results per page (1-50, default: 50)
+            page_before: Pagination cursor for previous page
+            page_after: Pagination cursor for next page
+
+        Returns:
+            Dict containing:
+            - data.wallets: List of wallet objects
+        """
+        logger.info(f"Listing wallets, wallet_set_id: {wallet_set_id}, blockchain: {blockchain}")
+
+        params = {
+            "pageSize": min(page_size, 50)
+        }
+
+        if wallet_set_id:
+            params["walletSetId"] = wallet_set_id
+        if blockchain:
+            params["blockchain"] = blockchain
+        if page_before:
+            params["pageBefore"] = page_before
+        if page_after:
+            params["pageAfter"] = page_after
+
+        result = await self._make_request(
+            method="GET",
+            endpoint="/v1/w3s/wallets",
+            params=params
+        )
+
+        return result
+
+    async def list_transactions(
+        self,
+        wallet_id: str = None,
+        blockchain: str = None,
+        page_size: int = 50,
+        page_before: str = None,
+        page_after: str = None
+    ) -> Dict[str, Any]:
+        """
+        List transactions with optional filtering.
+
+        Args:
+            wallet_id: Filter by wallet ID
+            blockchain: Filter by blockchain
+            page_size: Number of results per page (1-50, default: 50)
+            page_before: Pagination cursor for previous page
+            page_after: Pagination cursor for next page
+
+        Returns:
+            Dict containing:
+            - data.transactions: List of transaction objects
+        """
+        logger.info(f"Listing transactions, wallet_id: {wallet_id}, blockchain: {blockchain}")
+
+        params = {
+            "pageSize": min(page_size, 50)
+        }
+
+        if wallet_id:
+            params["walletIds"] = wallet_id
+        if blockchain:
+            params["blockchain"] = blockchain
+        if page_before:
+            params["pageBefore"] = page_before
+        if page_after:
+            params["pageAfter"] = page_after
+
+        result = await self._make_request(
+            method="GET",
+            endpoint="/v1/w3s/transactions",
+            params=params
+        )
+
+        return result
 
     async def close(self):
         """Close the HTTP client connection."""
@@ -426,12 +652,27 @@ def get_circle_service() -> CircleService:
     """
     Get a Circle service instance.
 
-    Uses environment configuration for API key.
+    Uses environment configuration for API key and entity secret.
     In production, this should use proper secret management.
+
+    Returns:
+        Configured CircleService instance
     """
     from app.core.config import settings
 
-    # Get API key from settings or use test key
-    api_key = getattr(settings, 'circle_api_key', 'test_circle_api_key')
+    # Get API key from settings
+    api_key = getattr(settings, 'circle_api_key', None)
+    if not api_key:
+        raise CircleAPIError("Circle API key not configured", status_code=500)
 
-    return CircleService(api_key=api_key)
+    # Get base URL (defaults to production)
+    base_url = getattr(settings, 'circle_base_url', CIRCLE_PRODUCTION_URL)
+
+    # Get entity secret
+    entity_secret = getattr(settings, 'circle_entity_secret', None)
+
+    return CircleService(
+        api_key=api_key,
+        base_url=base_url,
+        entity_secret=entity_secret
+    )

@@ -349,6 +349,113 @@ class PaymentReceipt(BaseModel):
         }
 
 
+class AgentPaymentRequest(BaseModel):
+    """
+    Request schema for POST /agents/{agent_id}/pay.
+    Initiates a USDC payment to an agent from the platform treasury.
+
+    Used for programmatic agent payments for task completion.
+    """
+    amount: str = Field(
+        ...,
+        description="Payment amount in USDC (e.g., '10.00')",
+        min_length=1,
+        max_length=32,
+        examples=["10.00"]
+    )
+    reason: str = Field(
+        ...,
+        description="Reason for the payment (e.g., 'Task completion payment')",
+        min_length=1,
+        max_length=500,
+        examples=["Task completion payment"]
+    )
+    task_id: Optional[str] = Field(
+        None,
+        description="Optional task reference ID",
+        max_length=64,
+        examples=["task_abc123"]
+    )
+    idempotency_key: Optional[str] = Field(
+        None,
+        description="Idempotency key for retry safety",
+        max_length=64,
+        examples=["payment-unique-key-789"]
+    )
+
+    @field_validator('amount')
+    @classmethod
+    def validate_payment_amount(cls, v: str) -> str:
+        """
+        Validate payment amount format.
+        Must be a positive decimal number within limits.
+        """
+        try:
+            amount = float(v)
+            if amount <= 0:
+                raise ValueError("Amount must be positive")
+            if amount > 10000:  # $10,000 cap for single agent payment
+                raise ValueError("Amount exceeds maximum single payment limit of $10,000")
+        except (ValueError, TypeError) as e:
+            if "must be positive" in str(e) or "exceeds maximum" in str(e):
+                raise
+            raise ValueError("Amount must be a valid decimal number")
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "amount": "10.00",
+                "reason": "Task completion payment",
+                "task_id": "task_abc123"
+            }
+        }
+
+
+class AgentPaymentResponse(BaseModel):
+    """
+    Response schema for agent payment operations.
+    Returns payment details including transfer ID and status.
+    """
+    payment_id: str = Field(..., description="Unique payment identifier")
+    agent_id: str = Field(..., description="Agent ID receiving the payment")
+    agent_did: str = Field(..., description="Agent DID receiving the payment")
+    amount: str = Field(..., description="Payment amount in USDC")
+    currency: str = Field(default="USD", description="Currency")
+    reason: str = Field(..., description="Payment reason")
+    task_id: Optional[str] = Field(None, description="Associated task ID")
+    transfer_id: str = Field(..., description="Associated transfer ID")
+    circle_transfer_id: str = Field(..., description="Circle platform transfer ID")
+    status: TransferStatus = Field(..., description="Payment status")
+    transaction_hash: Optional[str] = Field(None, description="Blockchain transaction hash")
+    source_wallet_id: str = Field(..., description="Treasury wallet ID (source)")
+    destination_wallet_id: str = Field(..., description="Agent wallet ID (destination)")
+    created_at: datetime = Field(..., description="Payment initiation timestamp")
+    completed_at: Optional[datetime] = Field(None, description="Payment completion timestamp")
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "payment_id": "payment_abc123def456",
+                "agent_id": "agent_001",
+                "agent_did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "amount": "10.00",
+                "currency": "USD",
+                "reason": "Task completion payment",
+                "task_id": "task_abc123",
+                "transfer_id": "transfer_xyz789",
+                "circle_transfer_id": "circle_xfr_001",
+                "status": "pending",
+                "transaction_hash": None,
+                "source_wallet_id": "wallet_treasury",
+                "destination_wallet_id": "wallet_agent_001",
+                "created_at": "2026-01-01T00:00:00Z",
+                "completed_at": None
+            }
+        }
+
+
 class ErrorResponse(BaseModel):
     """
     Standard error response per DX Contract.

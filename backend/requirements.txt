@@ -16,6 +16,9 @@ transformers>=4.45.0
 # Cryptography for X402 DID signing
 ecdsa>=0.18.0
 
+# Circle API entity secret encryption
+pycryptodome>=3.20.0
+
 # CrewAI and LangChain dependencies - using compatible versions for Python 3.13
 crewai>=0.11.0
 langchain>=0.1.0

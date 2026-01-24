@@ -2,9 +2,10 @@
 Application configuration using Pydantic Settings.
 Loads from environment variables and .env file.
 """
+import os
 from typing import Dict
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
 
 
 class Settings(BaseSettings):
@@ -71,9 +72,21 @@ class Settings(BaseSettings):
         description="Circle API key for USDC wallet operations"
     )
     circle_base_url: str = Field(
-        default="https://api-sandbox.circle.com",
-        description="Circle API base URL (sandbox for testing)"
+        default="https://api.circle.com",
+        description="Circle API base URL (production)"
     )
+    circle_entity_secret: str = Field(
+        default="",
+        description="Circle entity secret (32-byte hex string). Auto-generated if not provided."
+    )
+
+    @field_validator('circle_entity_secret', mode='before')
+    @classmethod
+    def generate_entity_secret_if_empty(cls, v: str) -> str:
+        """Generate a random entity secret if not provided."""
+        if not v or v == "":
+            return os.urandom(32).hex()
+        return v
 
     # Gemini AI Configuration (Issue #115)
     gemini_api_key: str = Field(
