@@ -242,7 +242,7 @@ class CircleWalletService:
 
         # Generate idempotency key if not provided
         if not idempotency_key:
-            idempotency_key = f"wlt_{uuid.uuid4().hex}"
+            idempotency_key = str(uuid.uuid4())
 
         # Get or create wallet set for this project
         wallet_set_id = await self._get_or_create_wallet_set(project_id)
@@ -617,9 +617,9 @@ class CircleWalletService:
         source_wallet = await self.get_wallet(source_wallet_id, project_id)
         dest_wallet = await self.get_wallet(destination_wallet_id, project_id)
 
-        # Generate idempotency key if not provided
+        # Generate idempotency key if not provided (must be UUID format for Circle)
         if not idempotency_key:
-            idempotency_key = f"xfr_{uuid.uuid4().hex}"
+            idempotency_key = str(uuid.uuid4())
 
         # Create transfer via Circle API
         # Note: Circle API requires destination_address (blockchain address), not wallet ID
@@ -981,7 +981,7 @@ class CircleWalletService:
 
         # Generate idempotency key if not provided
         if not idempotency_key:
-            idempotency_key = f"pay_{agent_id}_{uuid.uuid4().hex[:8]}"
+            idempotency_key = str(uuid.uuid4())
 
         # Initiate the transfer
         transfer = await self.initiate_transfer(
