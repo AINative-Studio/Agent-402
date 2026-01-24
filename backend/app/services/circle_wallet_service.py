@@ -312,45 +312,44 @@ class CircleWalletService:
         Raises:
             WalletNotFoundError: If wallet not found
         """
+        rows = []
+
+        # Try ZeroDB first
         try:
             result = await self.client.query_rows(
                 WALLETS_TABLE,
                 filter={"wallet_id": wallet_id, "project_id": project_id},
                 limit=1
             )
-
             rows = result.get("rows", [])
-            if not rows:
-                # Try Circle API directly - wallet_id might be Circle wallet ID
-                wallet = await self._get_wallet_from_circle(wallet_id)
-                if wallet:
-                    # Fetch balance
-                    try:
-                        balance_data = await self.circle_service.get_wallet_balance(wallet_id)
-                        wallet["balance"] = balance_data.get("amount", "0.00")
-                    except Exception as e:
-                        logger.warning(f"Could not fetch balance: {e}")
-                    return wallet
-                raise WalletNotFoundError(wallet_id)
-
-            wallet = rows[0]
-
-            # Get current balance from Circle
-            try:
-                balance_data = await self.circle_service.get_wallet_balance(
-                    wallet.get("circle_wallet_id")
-                )
-                wallet["balance"] = balance_data.get("amount", "0.00")
-            except Exception as e:
-                logger.warning(f"Could not fetch balance: {e}")
-
-            return wallet
-
-        except WalletNotFoundError:
-            raise
         except Exception as e:
-            logger.error(f"Failed to get wallet {wallet_id}: {e}")
+            logger.debug(f"ZeroDB query failed, will try Circle API: {e}")
+
+        # If not in ZeroDB, try Circle API directly
+        if not rows:
+            wallet = await self._get_wallet_from_circle(wallet_id)
+            if wallet:
+                # Fetch balance
+                try:
+                    balance_data = await self.circle_service.get_wallet_balance(wallet_id)
+                    wallet["balance"] = balance_data.get("amount", "0.00")
+                except Exception as e:
+                    logger.warning(f"Could not fetch balance: {e}")
+                return wallet
             raise WalletNotFoundError(wallet_id)
+
+        wallet = rows[0]
+
+        # Get current balance from Circle
+        try:
+            balance_data = await self.circle_service.get_wallet_balance(
+                wallet.get("circle_wallet_id")
+            )
+            wallet["balance"] = balance_data.get("amount", "0.00")
+        except Exception as e:
+            logger.warning(f"Could not fetch balance: {e}")
+
+        return wallet
 
     async def get_wallet_by_agent(
         self,
