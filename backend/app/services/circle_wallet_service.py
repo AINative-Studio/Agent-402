@@ -668,7 +668,7 @@ class CircleWalletService:
             "completed_at": None
         }
 
-        # Store in ZeroDB
+        # Store in ZeroDB (non-fatal - Circle transfer already succeeded)
         try:
             await self.client.insert_row(TRANSFERS_TABLE, transfer_data)
             logger.info(
@@ -677,8 +677,7 @@ class CircleWalletService:
                 f"amount: {amount}"
             )
         except Exception as e:
-            logger.error(f"Failed to store transfer in ZeroDB: {e}")
-            raise
+            logger.warning(f"Failed to store transfer in ZeroDB (transfer succeeded on Circle): {e}")
 
         return transfer_data
 
