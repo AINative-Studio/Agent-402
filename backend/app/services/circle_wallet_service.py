@@ -300,8 +300,10 @@ class CircleWalletService:
         """
         Get wallet details by ID.
 
+        First tries ZeroDB, then falls back to Circle API directly.
+
         Args:
-            wallet_id: Wallet identifier
+            wallet_id: Wallet identifier (can be our ID or Circle wallet ID)
             project_id: Project identifier
 
         Returns:
@@ -319,6 +321,16 @@ class CircleWalletService:
 
             rows = result.get("rows", [])
             if not rows:
+                # Try Circle API directly - wallet_id might be Circle wallet ID
+                wallet = await self._get_wallet_from_circle(wallet_id)
+                if wallet:
+                    # Fetch balance
+                    try:
+                        balance_data = await self.circle_service.get_wallet_balance(wallet_id)
+                        wallet["balance"] = balance_data.get("amount", "0.00")
+                    except Exception as e:
+                        logger.warning(f"Could not fetch balance: {e}")
+                    return wallet
                 raise WalletNotFoundError(wallet_id)
 
             wallet = rows[0]
@@ -523,6 +535,55 @@ class CircleWalletService:
         except Exception as e:
             logger.error(f"Failed to list wallets from Circle: {e}")
             return []
+
+    async def _get_wallet_from_circle(self, wallet_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a single wallet directly from Circle API.
+
+        Args:
+            wallet_id: Circle wallet ID
+
+        Returns:
+            Wallet dict in our internal format, or None if not found
+        """
+        try:
+            response = await self.circle_service.get_wallet(wallet_id)
+            cw = response.get("data", {}).get("wallet", {})
+
+            if not cw:
+                return None
+
+            # Extract wallet type from name
+            name = cw.get("name", "").lower()
+            if "analyst" in name:
+                wallet_type = "analyst"
+            elif "compliance" in name:
+                wallet_type = "compliance"
+            elif "transaction" in name:
+                wallet_type = "transaction"
+            else:
+                wallet_type = "unknown"
+
+            now = datetime.now(timezone.utc).isoformat()
+
+            return {
+                "wallet_id": cw.get("id"),
+                "circle_wallet_id": cw.get("id"),
+                "agent_did": cw.get("refId", ""),
+                "wallet_type": wallet_type,
+                "status": "active" if cw.get("state") == "LIVE" else "inactive",
+                "blockchain_address": cw.get("address"),
+                "blockchain": cw.get("blockchain", DEFAULT_BLOCKCHAIN),
+                "wallet_set_id": cw.get("walletSetId"),
+                "balance": "0.00",
+                "description": cw.get("name"),
+                "created_at": cw.get("createDate", now),
+                "updated_at": cw.get("updateDate", now)
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get wallet from Circle: {e}")
+            return None
 
     async def initiate_transfer(
         self,
