@@ -689,8 +689,10 @@ class CircleWalletService:
         """
         Get transfer details by ID.
 
+        First tries ZeroDB, then falls back to Circle API directly.
+
         Args:
-            transfer_id: Transfer identifier
+            transfer_id: Transfer identifier (our ID or Circle ID)
             project_id: Project identifier
 
         Returns:
@@ -699,24 +701,51 @@ class CircleWalletService:
         Raises:
             TransferNotFoundError: If transfer not found
         """
+        transfer = None
+        circle_transfer_id = None
+
+        # Try ZeroDB first
         try:
             result = await self.client.query_rows(
                 TRANSFERS_TABLE,
                 filter={"transfer_id": transfer_id, "project_id": project_id},
                 limit=1
             )
-
             rows = result.get("rows", [])
-            if not rows:
-                raise TransferNotFoundError(transfer_id)
+            if rows:
+                transfer = rows[0]
+                circle_transfer_id = transfer.get("circle_transfer_id")
+        except Exception as e:
+            logger.debug(f"ZeroDB query failed: {e}")
 
-            transfer = rows[0]
-
-            # Get current status from Circle
+        # If not found by our ID, try by circle_transfer_id
+        if not transfer:
             try:
-                circle_transfer = await self.circle_service.get_transfer(
-                    transfer.get("circle_transfer_id")
+                result = await self.client.query_rows(
+                    TRANSFERS_TABLE,
+                    filter={"circle_transfer_id": transfer_id, "project_id": project_id},
+                    limit=1
                 )
+                rows = result.get("rows", [])
+                if rows:
+                    transfer = rows[0]
+                    circle_transfer_id = transfer.get("circle_transfer_id")
+            except Exception as e:
+                logger.debug(f"ZeroDB query by circle_id failed: {e}")
+
+        # If still not found in ZeroDB, query Circle API directly
+        if not transfer:
+            # Assume the transfer_id might be the Circle transfer ID
+            circle_transfer_id = transfer_id
+            transfer = await self._get_transfer_from_circle(transfer_id, project_id)
+            if not transfer:
+                raise TransferNotFoundError(transfer_id)
+            return transfer
+
+        # Get current status from Circle
+        if circle_transfer_id:
+            try:
+                circle_transfer = await self.circle_service.get_transfer(circle_transfer_id)
                 circle_data = circle_transfer.get("data", circle_transfer)
 
                 # Map Circle's state to our status
@@ -746,13 +775,70 @@ class CircleWalletService:
             except Exception as e:
                 logger.warning(f"Could not fetch transfer status from Circle: {e}")
 
-            return transfer
+        return transfer
 
-        except TransferNotFoundError:
-            raise
+    async def _get_transfer_from_circle(
+        self,
+        circle_transfer_id: str,
+        project_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a transfer directly from Circle API.
+
+        Args:
+            circle_transfer_id: Circle transfer ID
+            project_id: Project identifier
+
+        Returns:
+            Transfer dict in our internal format, or None if not found
+        """
+        try:
+            response = await self.circle_service.get_transfer(circle_transfer_id)
+            ct = response.get("data", response)
+
+            if not ct:
+                return None
+
+            # Map Circle's state to our status
+            circle_state = ct.get("state", "INITIATED")
+            status_map = {
+                "INITIATED": "pending",
+                "QUEUED": "pending",
+                "SENT": "pending",
+                "CONFIRMED": "pending",
+                "COMPLETE": "complete",
+                "FAILED": "failed",
+                "CANCELLED": "cancelled",
+                "DENIED": "denied"
+            }
+            status = status_map.get(circle_state, "pending")
+
+            now = datetime.now(timezone.utc).isoformat()
+
+            # Build transfer in our internal format
+            amounts = ct.get("amounts", [{}])
+            amount_data = amounts[0] if amounts else {}
+
+            return {
+                "transfer_id": circle_transfer_id,  # Use Circle ID as our ID
+                "project_id": project_id,
+                "circle_transfer_id": circle_transfer_id,
+                "source_wallet_id": ct.get("sourceWalletId", ct.get("source", {}).get("id", "")),
+                "destination_wallet_id": ct.get("destinationAddress", ct.get("destination", {}).get("address", "")),
+                "amount": amount_data.get("amount", "0.00"),
+                "currency": amount_data.get("currency", "USD"),
+                "status": status,
+                "circle_state": circle_state,
+                "x402_request_id": None,
+                "transaction_hash": ct.get("txHash", ct.get("transactionHash")),
+                "metadata": {},
+                "created_at": ct.get("createDate", now),
+                "completed_at": now if status == "complete" else None
+            }
+
         except Exception as e:
-            logger.error(f"Failed to get transfer {transfer_id}: {e}")
-            raise TransferNotFoundError(transfer_id)
+            logger.error(f"Failed to get transfer from Circle: {e}")
+            return None
 
     async def _update_transfer_status(
         self,
