@@ -93,6 +93,19 @@ class ProjectStore:
                 created_at=datetime(2025, 1, 5, 0, 0, 0, tzinfo=timezone.utc),
                 updated_at=datetime(2025, 1, 5, 0, 0, 0, tzinfo=timezone.utc),
             ),
+            # AINative admin user project - for Circle wallet integration
+            # User ID from AINative: admin@ainative.studio
+            Project(
+                id="circle-demo-project",
+                name="Circle Wallet Demo",
+                status=ProjectStatus.ACTIVE,
+                tier=ProjectTier.PRO,
+                user_id="a9b717be-f449-43c6-abb4-18a1a6a0c70e",
+                description="Circle Developer-Controlled Wallets demo project",
+                database_enabled=True,
+                created_at=datetime(2026, 1, 24, 0, 0, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2026, 1, 24, 0, 0, 0, tzinfo=timezone.utc),
+            ),
         ]
 
         for project in demo_projects:
