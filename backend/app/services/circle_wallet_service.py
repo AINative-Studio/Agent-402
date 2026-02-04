@@ -587,6 +587,75 @@ class CircleWalletService:
             logger.error(f"Failed to list transfers: {e}")
             return [], 0
 
+    async def update_wallet_status(
+        self,
+        wallet_id: str,
+        project_id: str,
+        status: str,
+        reason: Optional[str] = None,
+        frozen_until: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Update wallet status in ZeroDB.
+
+        Args:
+            wallet_id: Wallet identifier
+            project_id: Project identifier
+            status: New wallet status
+            reason: Optional reason for status change
+            frozen_until: Optional timestamp for automatic unfreeze
+
+        Returns:
+            Dict containing updated wallet data
+
+        Raises:
+            WalletNotFoundError: If wallet not found
+        """
+        try:
+            # Query to find the wallet row
+            result = await self.client.query_rows(
+                WALLETS_TABLE,
+                filter={"wallet_id": wallet_id, "project_id": project_id},
+                limit=1
+            )
+
+            rows = result.get("rows", [])
+            if not rows:
+                raise WalletNotFoundError(wallet_id)
+
+            wallet = rows[0]
+            row_id = wallet.get("row_id", wallet.get("id"))
+
+            if not row_id:
+                logger.error(f"No row_id found for wallet {wallet_id}")
+                raise WalletNotFoundError(wallet_id)
+
+            # Update wallet data
+            now = datetime.now(timezone.utc)
+            updated_data = {
+                **wallet,
+                "status": status,
+                "updated_at": now.isoformat()
+            }
+
+            # Add optional fields if provided
+            if reason:
+                updated_data["status_reason"] = reason
+            if frozen_until:
+                updated_data["frozen_until"] = frozen_until
+
+            # Update in ZeroDB
+            await self.client.update_row(WALLETS_TABLE, str(row_id), updated_data)
+            logger.info(f"Updated wallet {wallet_id} status to {status}")
+
+            return updated_data
+
+        except WalletNotFoundError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update wallet status: {e}")
+            raise WalletNotFoundError(wallet_id)
+
     async def generate_receipt(
         self,
         transfer_id: str,
