@@ -70,6 +70,11 @@ class WalletCreateRequest(BaseModel):
         max_length=500,
         examples=["Transaction agent wallet for USDC payments"]
     )
+    max_daily_spend: Optional[str] = Field(
+        None,
+        description="Maximum daily spend limit in USDC (None = unlimited). Format: '100.00'",
+        examples=["100.00", "1000.50"]
+    )
     idempotency_key: Optional[str] = Field(
         None,
         description="Idempotency key for retry safety",
@@ -120,6 +125,7 @@ class WalletResponse(BaseModel):
     blockchain: str = Field(default="ETH-SEPOLIA", description="Blockchain network")
     balance: str = Field(default="0.00", description="Current USDC balance")
     description: Optional[str] = Field(None, description="Wallet description")
+    max_daily_spend: Optional[str] = Field(None, description="Maximum daily spend limit in USDC (None = unlimited)")
     created_at: datetime = Field(..., description="Wallet creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
