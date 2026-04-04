@@ -41,6 +41,7 @@ class WalletStatus(str, Enum):
     Wallet status enumeration.
     """
     ACTIVE = "active"
+    PAUSED = "paused"
     INACTIVE = "inactive"
     FROZEN = "frozen"
 

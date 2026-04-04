@@ -67,6 +67,8 @@ from app.api.rows import router as rows_router
 from app.api.agent_interactions import router as agent_interactions_router
 # Issue #114: Circle Wallets and USDC Payments
 from app.api.circle import router as circle_router
+# Issue #156: Wallet status management API
+from app.api.wallet_status import router as wallet_status_router
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -437,6 +439,8 @@ app.include_router(rows_router)
 app.include_router(agent_interactions_router)
 # Issue #114: Circle Wallets and USDC Payments
 app.include_router(circle_router)
+# Issue #156: Wallet status management API
+app.include_router(wallet_status_router)
 
 
 # Root endpoint
