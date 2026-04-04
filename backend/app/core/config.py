@@ -2,6 +2,8 @@
 Application configuration using Pydantic Settings.
 Loads from environment variables and .env file.
 """
+from __future__ import annotations
+
 import os
 from typing import Dict
 from pydantic_settings import BaseSettings

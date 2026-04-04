@@ -88,6 +88,26 @@ try:
 except ImportError:
     hedera_reputation_router = None
     _hedera_reputation_router_available = False
+# Sprint 3 - Epic 19: HCS Anchoring
+try:
+    from app.api.hcs_anchoring import router as hcs_anchoring_router
+except ImportError:
+    hcs_anchoring_router = None
+# Sprint 3 - Epic 20: OpenConvAI HCS-10
+try:
+    from app.api.openconvai import router as openconvai_router
+except ImportError:
+    openconvai_router = None
+# Sprint 3 - Epic 21: Memory Decay
+try:
+    from app.api.memory_decay import router as memory_decay_router
+except ImportError:
+    memory_decay_router = None
+# Sprint 3 - Epic 27: OpenClaw Agents
+try:
+    from app.api.openclaw_agents import router as openclaw_agents_router
+except ImportError:
+    openclaw_agents_router = None
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -477,6 +497,18 @@ if _hedera_identity_router_available and hedera_identity_router is not None:
 # Epic 18: Reputation System on Hedera (registered when module is available)
 if _hedera_reputation_router_available and hedera_reputation_router is not None:
     app.include_router(hedera_reputation_router)
+# Sprint 3 - Epic 19: HCS Anchoring (registered when module is available)
+if hcs_anchoring_router is not None:
+    app.include_router(hcs_anchoring_router)
+# Sprint 3 - Epic 20: OpenConvAI HCS-10 (registered when module is available)
+if openconvai_router is not None:
+    app.include_router(openconvai_router)
+# Sprint 3 - Epic 21: Memory Decay (registered when module is available)
+if memory_decay_router is not None:
+    app.include_router(memory_decay_router)
+# Sprint 3 - Epic 27: OpenClaw Agents (registered when module is available)
+if openclaw_agents_router is not None:
+    app.include_router(openclaw_agents_router)
 
 
 # Root endpoint
