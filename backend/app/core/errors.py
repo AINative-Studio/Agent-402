@@ -819,6 +819,67 @@ class InvalidProjectStatusError(APIError):
         self.valid_statuses = valid_statuses
 
 
+class PerTransactionLimitExceededError(APIError):
+    """
+    Raised when a single transaction amount exceeds the configured per-tx limit.
+
+    Issue #239: Per-transaction spend limit enforcement.
+
+    Returns:
+        - HTTP 422 (Unprocessable Entity)
+        - error_code: PER_TX_LIMIT_EXCEEDED
+        - detail: Message identifying the agent and the overage
+    """
+
+    def __init__(self, agent_id: str, amount: "Any", max_per_tx: "Any"):
+        from decimal import Decimal
+        try:
+            overage = Decimal(str(amount)) - Decimal(str(max_per_tx))
+        except Exception:
+            overage = None
+        overage_str = f" (overage: {overage})" if overage is not None else ""
+        detail = (
+            f"Per-transaction limit exceeded for agent '{agent_id}'. "
+            f"Requested: {amount}, limit: {max_per_tx}{overage_str}."
+        )
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="PER_TX_LIMIT_EXCEEDED",
+            detail=detail,
+        )
+        self.agent_id = agent_id
+        self.amount = amount
+        self.max_per_tx = max_per_tx
+
+
+class RateLimitExceededError(APIError):
+    """
+    Raised when an agent DID exceeds the allowed request rate.
+
+    Issue #239: Sliding-window rate limiting enforcement.
+
+    Returns:
+        - HTTP 429 (Too Many Requests)
+        - error_code: RATE_LIMIT_EXCEEDED
+        - Retry-After header seconds via retry_after_seconds attribute
+    """
+
+    def __init__(self, did: str, retry_after_seconds: int = 60):
+        detail = (
+            f"Rate limit exceeded for '{did}'. "
+            f"Retry after {retry_after_seconds} seconds."
+        )
+        headers = {"Retry-After": str(retry_after_seconds)}
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            error_code="RATE_LIMIT_EXCEEDED",
+            detail=detail,
+            headers=headers,
+        )
+        self.did = did
+        self.retry_after_seconds = retry_after_seconds
+
+
 def format_error_response(error_code: str, detail: str) -> Dict[str, str]:
     """
     Format error response per DX Contract.

@@ -1,15 +1,19 @@
 """
 Spend Tracking Service for per-agent daily budget enforcement.
 Issue #153: Implement per-agent daily spending limits.
+Issue #239: Per-transaction spend limit enforcement.
 
 This service handles:
 - Tracking daily spend per agent
 - Checking if a payment would exceed daily budget
+- Enforcing per-transaction spend limits
 - Calculating remaining budget
 - Resetting daily spend at midnight UTC
 
 Uses ZeroDB for persistence via the agent_spend_tracking table.
 """
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
@@ -189,6 +193,56 @@ class SpendTrackingService:
 
 
 
+    async def check_per_transaction_limit(
+        self,
+        agent_id: str,
+        amount: Decimal,
+        max_per_tx: Optional[Decimal],
+    ) -> bool:
+        """
+        Check that a single transaction amount does not exceed the per-tx limit.
+
+        Issue #239: Per-transaction spend limit enforcement.
+
+        Args:
+            agent_id: Agent DID or identifier
+            amount: Transaction amount to validate
+            max_per_tx: Maximum allowed per-transaction spend (None = unlimited)
+
+        Returns:
+            True if the amount is within the limit
+
+        Raises:
+            PerTransactionLimitExceededError: When amount exceeds max_per_tx
+        """
+        from app.core.errors import PerTransactionLimitExceededError
+
+        if max_per_tx is None:
+            logger.info(
+                f"Per-tx check passed for agent {agent_id}: no limit configured",
+                extra={"agent_id": agent_id, "amount": str(amount)},
+            )
+            return True
+
+        if amount <= max_per_tx:
+            logger.info(
+                f"Per-tx check passed for agent {agent_id}: "
+                f"amount={amount} <= limit={max_per_tx}",
+                extra={"agent_id": agent_id, "amount": str(amount), "max_per_tx": str(max_per_tx)},
+            )
+            return True
+
+        logger.warning(
+            f"Per-tx check BLOCKED for agent {agent_id}: "
+            f"amount={amount} exceeds limit={max_per_tx}",
+            extra={"agent_id": agent_id, "amount": str(amount), "max_per_tx": str(max_per_tx)},
+        )
+        raise PerTransactionLimitExceededError(
+            agent_id=agent_id,
+            amount=amount,
+            max_per_tx=max_per_tx,
+        )
+
     async def get_monthly_spend(
         self,
         agent_id: str,
@@ -279,11 +333,15 @@ class SpendTrackingService:
         project_id: str,
         amount: Decimal,
         daily_limit: Optional[Decimal] = None,
-        monthly_limit: Optional[Decimal] = None
+        monthly_limit: Optional[Decimal] = None,
+        max_per_tx: Optional[Decimal] = None,
     ) -> Dict[str, Any]:
         """
-        Check both daily and monthly budgets.
-        Transaction must pass BOTH checks.
+        Check daily, monthly, and per-transaction budgets.
+        Transaction must pass ALL configured checks.
+
+        Issue #153: Daily and monthly limit enforcement.
+        Issue #239: Per-transaction limit enforcement added.
 
         Args:
             agent_id: Agent identifier
@@ -291,16 +349,29 @@ class SpendTrackingService:
             amount: Transaction amount to check
             daily_limit: Optional daily spending limit in USDC
             monthly_limit: Optional monthly spending limit in USDC
+            max_per_tx: Optional per-transaction spending limit in USDC
 
         Returns:
             Dict with:
-                - allowed: bool (True only if both limits pass)
+                - allowed: bool (True only if all configured limits pass)
                 - violations: List of limit violations with details
         """
-        results = {
+        results: Dict[str, Any] = {
             "allowed": True,
-            "violations": []
+            "violations": [],
         }
+
+        # Check per-transaction limit first (cheapest check — no DB query)
+        if max_per_tx is not None and amount > max_per_tx:
+            results["allowed"] = False
+            results["violations"].append({
+                "type": "per_tx_limit_exceeded",
+                "details": {
+                    "amount": amount,
+                    "max_per_tx": max_per_tx,
+                    "exceeded_by": amount - max_per_tx,
+                },
+            })
 
         # Check daily limit if provided
         if daily_limit is not None:
@@ -311,7 +382,7 @@ class SpendTrackingService:
                 results["allowed"] = False
                 results["violations"].append({
                     "type": "daily_limit_exceeded",
-                    "details": daily_check
+                    "details": daily_check,
                 })
 
         # Check monthly limit if provided
@@ -323,7 +394,7 @@ class SpendTrackingService:
                 results["allowed"] = False
                 results["violations"].append({
                     "type": "monthly_limit_exceeded",
-                    "details": monthly_check
+                    "details": monthly_check,
                 })
 
         return results
