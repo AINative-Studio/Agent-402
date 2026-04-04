@@ -9,6 +9,11 @@ Issue #187: USDC Payment Settlement via HTS
 - Payment receipt with Hedera transaction hash
 - Integration with existing X402 protocol flow
 
+Issue #189: Payment Receipt Verification
+- mirror_node_url field on receipts for independent verification
+- agent_id and task_id fields for audit trail linkage
+- verify_receipt_on_mirror_node() method
+
 Hedera technical notes:
 - USDC on Hedera is a native HTS (Hedera Token Service) token
 - Token ID (testnet): 0.0.456858
@@ -16,15 +21,23 @@ Hedera technical notes:
 - TransferTransaction is used for all HTS token transfers
 
 Built by AINative Dev Team
-Refs #187
+Refs #187, #189
 """
+from __future__ import annotations
+
 import uuid
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
 from app.core.errors import APIError
-from app.services.hedera_client import HederaClient, get_hedera_client, USDC_TOKEN_ID_TESTNET
+from app.services.hedera_client import (
+    HederaClient,
+    get_hedera_client,
+    USDC_TOKEN_ID_TESTNET,
+    HEDERA_TESTNET_MIRROR_URL,
+    HEDERA_MAINNET_MIRROR_URL,
+)
 from app.services.zerodb_client import get_zerodb_client
 
 logger = logging.getLogger(__name__)
@@ -140,6 +153,36 @@ class HederaPaymentService:
         if self._zerodb_client is None:
             self._zerodb_client = get_zerodb_client()
         return self._zerodb_client
+
+    def _build_mirror_node_url(self, transaction_id: str) -> str:
+        """
+        Build the Hedera mirror node URL for a transaction.
+
+        Encodes the transaction ID by replacing '@' and '.' with '-' to
+        produce a URL-safe path segment, then appends it to the mirror node
+        base URL.
+
+        Example:
+            "0.0.12345@1234567890.000000000"
+            -> "https://testnet.mirrornode.hedera.com/api/v1/transactions/0-0-12345-1234567890-000000000"
+
+        Args:
+            transaction_id: Hedera transaction ID in {account}@{seconds}.{nanos} format
+
+        Returns:
+            Full mirror node URL for this transaction
+        """
+        # Determine base URL from the client's network setting
+        if self._hedera_client is not None:
+            mirror_base = self._hedera_client.mirror_url
+        else:
+            # Default to testnet before client is lazily initialised
+            mirror_base = HEDERA_TESTNET_MIRROR_URL
+
+        # URL-encode: replace @ and . with - for a clean path segment
+        encoded_tx_id = transaction_id.replace("@", "-").replace(".", "-")
+
+        return f"{mirror_base}/transactions/{encoded_tx_id}"
 
     def _validate_account_id(self, account_id: str, field_name: str = "account_id") -> None:
         """
@@ -300,7 +343,9 @@ class HederaPaymentService:
 
     async def get_payment_receipt(
         self,
-        transaction_id: str
+        transaction_id: str,
+        agent_id: Optional[str] = None,
+        task_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get the full receipt for a Hedera payment transaction.
@@ -309,9 +354,13 @@ class HederaPaymentService:
         - Transaction hash for on-chain verification
         - Consensus timestamp for finality proof
         - Status for payment confirmation
+        - mirror_node_url: Direct link to this transaction on the mirror node
+        - agent_id / task_id: Audit trail linkage (Issue #189)
 
         Args:
             transaction_id: Hedera transaction ID
+            agent_id: Optional agent identifier for audit trail (Issue #189)
+            task_id: Optional task identifier for audit trail (Issue #189)
 
         Returns:
             Dict containing:
@@ -320,6 +369,9 @@ class HederaPaymentService:
             - status: Transaction status
             - consensus_timestamp: When consensus was reached
             - charged_tx_fee: Network fee charged
+            - mirror_node_url: Direct mirror node URL for the transaction
+            - agent_id: Agent identifier (if provided)
+            - task_id: Task identifier (if provided)
 
         Raises:
             HederaPaymentError: If transaction_id is empty or query fails
@@ -337,12 +389,17 @@ class HederaPaymentService:
                 transaction_id=transaction_id
             )
 
+            mirror_node_url = self._build_mirror_node_url(transaction_id)
+
             return {
                 "transaction_id": transaction_id,
                 "hash": receipt.get("hash"),
                 "status": receipt.get("status", "UNKNOWN"),
                 "consensus_timestamp": receipt.get("consensus_timestamp"),
-                "charged_tx_fee": receipt.get("charged_tx_fee", 0)
+                "charged_tx_fee": receipt.get("charged_tx_fee", 0),
+                "mirror_node_url": mirror_node_url,
+                "agent_id": agent_id,
+                "task_id": task_id
             }
 
         except HederaPaymentError:
@@ -351,6 +408,67 @@ class HederaPaymentService:
             logger.error(f"Failed to get receipt for tx {transaction_id}: {e}")
             raise HederaPaymentError(
                 f"Failed to get payment receipt: {str(e)}"
+            )
+
+    async def verify_receipt_on_mirror_node(
+        self,
+        transaction_id: str
+    ) -> Dict[str, Any]:
+        """
+        Verify a transaction receipt directly against the Hedera mirror node.
+
+        Queries the mirror node and returns structured verification status.
+        Provides a direct link to the mirror node entry for independent
+        verification by callers.
+
+        Args:
+            transaction_id: Hedera transaction ID to verify
+
+        Returns:
+            Dict containing:
+            - verified: True if transaction status is SUCCESS
+            - transaction_status: Raw status from the mirror node
+            - mirror_node_url: Direct URL to this transaction on the mirror node
+            - consensus_timestamp: When consensus was reached (if settled)
+
+        Raises:
+            HederaPaymentError: If transaction_id is empty or query fails
+        """
+        if not transaction_id or not transaction_id.strip():
+            raise HederaPaymentError(
+                "transaction_id cannot be empty",
+                status_code=400
+            )
+
+        logger.info(
+            f"Verifying receipt on mirror node for transaction: {transaction_id}"
+        )
+
+        mirror_node_url = self._build_mirror_node_url(transaction_id)
+
+        try:
+            receipt = await self.hedera_client.get_transaction_receipt(
+                transaction_id=transaction_id
+            )
+
+            transaction_status = receipt.get("status", "UNKNOWN")
+            verified = transaction_status == "SUCCESS"
+
+            return {
+                "verified": verified,
+                "transaction_status": transaction_status,
+                "mirror_node_url": mirror_node_url,
+                "consensus_timestamp": receipt.get("consensus_timestamp")
+            }
+
+        except HederaPaymentError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Mirror node receipt verification failed for tx {transaction_id}: {e}"
+            )
+            raise HederaPaymentError(
+                f"Mirror node verification failed: {str(e)}"
             )
 
     async def create_x402_payment(
