@@ -3,6 +3,7 @@ Hedera Payments API endpoints.
 Implements USDC payment settlement via Hedera Token Service (HTS).
 
 Issue #187: USDC Payment Settlement via HTS
+Issue #189: Payment Receipt Verification
 
 Endpoints:
 - POST /v1/public/{project_id}/hedera/payments
@@ -11,12 +12,16 @@ Endpoints:
     Get full payment receipt with Hedera transaction hash
 - POST /v1/public/{project_id}/hedera/payments/verify
     Verify whether a Hedera transaction has settled
+- GET  /v1/public/{project_id}/hedera/payments/{transaction_id}/verify
+    Verify receipt on mirror node and return verification status
 
 All endpoints require X-API-Key authentication.
 
 Built by AINative Dev Team
-Refs #187
+Refs #187, #189
 """
+from __future__ import annotations
+
 import logging
 from fastapi import APIRouter, Depends, status
 
@@ -25,7 +30,8 @@ from app.schemas.hedera import (
     HederaPaymentResponse,
     HederaSettlementVerifyRequest,
     HederaSettlementVerifyResponse,
-    HederaPaymentReceiptResponse
+    HederaPaymentReceiptResponse,
+    ReceiptVerificationResponse
 )
 from app.services.hedera_payment_service import (
     HederaPaymentService,
@@ -262,5 +268,71 @@ async def verify_settlement(
         transaction_id=result["transaction_id"],
         settled=result["settled"],
         status=result["status"],
+        consensus_timestamp=result.get("consensus_timestamp")
+    )
+
+
+@router.get(
+    "/{project_id}/hedera/payments/{transaction_id}/verify",
+    response_model=ReceiptVerificationResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "description": "Receipt verification status from mirror node",
+            "model": ReceiptVerificationResponse
+        },
+        400: {
+            "description": "Invalid transaction_id"
+        },
+        502: {
+            "description": "Hedera network or mirror node error"
+        }
+    },
+    summary="Verify payment receipt on Hedera mirror node",
+    description="""
+    Verify a payment receipt directly against the Hedera mirror node.
+
+    **Authentication:** Requires X-API-Key header
+
+    **Issue #189:** Payment Receipt Verification
+
+    Queries the Hedera mirror node for the transaction and returns:
+    - verified: True if the transaction reached consensus (status=SUCCESS)
+    - transaction_status: Raw status from the mirror node
+    - mirror_node_url: Direct link for independent external verification
+    - consensus_timestamp: When the transaction reached consensus
+
+    **URL parameter:**
+    - transaction_id: Hedera transaction ID (e.g., 0.0.12345@1234567890.000000000)
+    """
+)
+async def verify_payment_receipt(
+    project_id: str,
+    transaction_id: str,
+    payment_service: HederaPaymentService = Depends(get_hedera_payment_service)
+) -> ReceiptVerificationResponse:
+    """
+    Verify a Hedera payment receipt on the mirror node.
+
+    Args:
+        project_id: Project identifier from URL
+        transaction_id: Hedera transaction ID from URL path
+        payment_service: Injected HederaPaymentService
+
+    Returns:
+        ReceiptVerificationResponse with verification status and mirror node URL
+    """
+    logger.info(
+        f"GET /hedera/payments/{transaction_id}/verify: project={project_id}"
+    )
+
+    result = await payment_service.verify_receipt_on_mirror_node(
+        transaction_id=transaction_id
+    )
+
+    return ReceiptVerificationResponse(
+        verified=result["verified"],
+        transaction_status=result["transaction_status"],
+        mirror_node_url=result["mirror_node_url"],
         consensus_timestamp=result.get("consensus_timestamp")
     )

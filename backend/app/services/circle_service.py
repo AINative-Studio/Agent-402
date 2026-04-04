@@ -3,13 +3,11 @@ Circle API Service Layer.
 Implements Circle API client for USDC wallet and transfer operations.
 
 Issue #114: Implement Circle Wallets and USDC Payments
-
-This service handles:
-- Wallet set creation via Circle API
-- Wallet creation via Circle API
-- Wallet balance retrieval
-- USDC transfer operations
-- Transfer status tracking
+Issue #238: Production Circle Gateway USDC Integration
+  - CIRCLE_USE_PRODUCTION env var toggle (default False = mock mode)
+  - Retry logic with exponential backoff (max 3 retries) for transient failures
+  - Proper error handling for rate limits (429), auth failures (401), network errors
+  - Real Circle API calls when production mode is enabled
 
 Per PRD Section 8 (X402 Protocol):
 - Circle wallets enable USDC payments for X402 transactions
@@ -26,7 +24,11 @@ API Documentation:
 - Auth: Bearer token with format PREFIX:ID:SECRET
 - Blockchain: ARC-TESTNET for testnet operations
 """
+from __future__ import annotations
+
+import os
 import uuid
+import asyncio
 import logging
 import httpx
 from typing import Dict, Any, Optional, List
@@ -46,6 +48,16 @@ CIRCLE_SANDBOX_URL = "https://api-sandbox.circle.com"
 
 # Default blockchain for testnet operations
 DEFAULT_BLOCKCHAIN = "ARC-TESTNET"
+
+# Retry configuration for transient failures (Issue #238)
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY_SECONDS = 1.0  # doubled on each attempt (exponential backoff)
+
+# HTTP status codes that are transient and eligible for retry
+_TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# HTTP status codes that are permanent failures — do NOT retry
+_PERMANENT_FAILURE_STATUS_CODES = {400, 401, 403, 404, 422}
 
 
 class CircleAPIError(APIError):
@@ -156,7 +168,8 @@ class CircleService:
         self,
         api_key: str,
         base_url: str = None,
-        entity_secret: str = None
+        entity_secret: str = None,
+        use_production: Optional[bool] = None
     ):
         """
         Initialize the Circle service.
@@ -165,11 +178,22 @@ class CircleService:
             api_key: Circle API key (required)
             base_url: Optional custom base URL (defaults to production)
             entity_secret: Entity secret for signing operations (32-byte hex string)
+            use_production: Override production mode flag. When None, reads from
+                CIRCLE_USE_PRODUCTION env var (default: False). When True, real
+                Circle API calls replace mock/simulated responses. (Issue #238)
         """
         self.api_key = api_key
         self.base_url = base_url or CIRCLE_PRODUCTION_URL
         self.entity_secret = entity_secret
         self._client: Optional[httpx.AsyncClient] = None
+
+        # Issue #238: production mode toggle
+        if use_production is not None:
+            # Explicit constructor argument wins over env var
+            self.use_production = bool(use_production)
+        else:
+            env_val = os.environ.get("CIRCLE_USE_PRODUCTION", "false").strip().lower()
+            self.use_production = env_val in ("true", "1", "yes")
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -274,6 +298,87 @@ class CircleService:
         except Exception as e:
             logger.error(f"Unexpected error in Circle API request: {e}")
             raise CircleAPIError(f"Unexpected error: {str(e)}", 500)
+
+    async def _make_request_with_retry(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Make an authenticated request to Circle API with exponential backoff retry.
+
+        Retries on transient failures (network errors, 429, 5xx) up to
+        _MAX_RETRIES times with exponential backoff starting at
+        _RETRY_BASE_DELAY_SECONDS. Non-transient errors (401, 403, 404, etc.)
+        are raised immediately without retrying.
+
+        Issue #238: Retry logic with exponential backoff for transient failures.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint path
+            data: Request body data
+            params: Query parameters
+
+        Returns:
+            API response data
+
+        Raises:
+            CircleAPIError: If all retries are exhausted or a permanent failure occurs
+        """
+        last_error: Optional[Exception] = None
+
+        for attempt in range(_MAX_RETRIES + 1):  # attempt 0 is the initial call
+            try:
+                return await self._make_request(
+                    method=method,
+                    endpoint=endpoint,
+                    data=data,
+                    params=params
+                )
+            except CircleAPIError as exc:
+                # Non-transient HTTP errors are never retried
+                if exc.circle_status_code in _PERMANENT_FAILURE_STATUS_CODES:
+                    logger.warning(
+                        f"Non-transient Circle API error ({exc.circle_status_code}) "
+                        f"on {method} {endpoint}: {exc.detail}. Not retrying."
+                    )
+                    raise
+
+                last_error = exc
+                logger.warning(
+                    f"Transient Circle API error ({exc.circle_status_code}) "
+                    f"on attempt {attempt + 1}/{_MAX_RETRIES + 1} "
+                    f"for {method} {endpoint}: {exc.detail}"
+                )
+
+            except (httpx.RequestError, httpx.TimeoutException) as exc:
+                # Network-level errors are always treated as transient
+                last_error = CircleAPIError(
+                    f"Circle API connection error: {str(exc)}", 502
+                )
+                logger.warning(
+                    f"Network error on attempt {attempt + 1}/{_MAX_RETRIES + 1} "
+                    f"for {method} {endpoint}: {exc}"
+                )
+
+            # If we haven't exhausted retries, apply exponential backoff
+            if attempt < _MAX_RETRIES:
+                delay = _RETRY_BASE_DELAY_SECONDS * (2 ** attempt)
+                logger.info(
+                    f"Retrying {method} {endpoint} in {delay:.1f}s "
+                    f"(attempt {attempt + 2}/{_MAX_RETRIES + 1})"
+                )
+                await asyncio.sleep(delay)
+
+        # All retries exhausted
+        if last_error is not None:
+            raise last_error
+        raise CircleAPIError(
+            f"Circle API request failed after {_MAX_RETRIES} retries", 502
+        )
 
     async def create_wallet_set(
         self,

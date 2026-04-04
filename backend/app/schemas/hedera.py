@@ -3,12 +3,15 @@ Pydantic schemas for Hedera payment and wallet API requests/responses.
 
 Issue #187: USDC Payment Settlement via HTS
 Issue #188: Agent Wallet Creation
+Issue #189: Payment Receipt Verification
 
 All request/response models use Pydantic v2 conventions.
 
 Built by AINative Dev Team
-Refs #187, #188
+Refs #187, #188, #189
 """
+from __future__ import annotations
+
 from typing import Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
@@ -335,6 +338,8 @@ class HederaPaymentReceiptResponse(BaseModel):
     Response schema for payment receipt retrieval.
 
     Full receipt including hash for on-chain verification.
+    Extended by Issue #189 with mirror_node_url, agent_id, and task_id
+    fields for audit trail linkage.
     """
     transaction_id: str = Field(
         ...,
@@ -356,6 +361,22 @@ class HederaPaymentReceiptResponse(BaseModel):
         default=None,
         description="Network fee charged in tinybars"
     )
+    # Issue #189: audit trail and mirror node linkage fields
+    mirror_node_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "Direct URL to this transaction on the Hedera mirror node. "
+            "Format: https://testnet.mirrornode.hedera.com/api/v1/transactions/{encoded_tx_id}"
+        )
+    )
+    agent_id: Optional[str] = Field(
+        default=None,
+        description="Agent identifier associated with this payment (for audit trail)"
+    )
+    task_id: Optional[str] = Field(
+        default=None,
+        description="Task identifier associated with this payment (for audit trail)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -364,6 +385,47 @@ class HederaPaymentReceiptResponse(BaseModel):
                 "hash": "0xabcdef1234567890abcdef1234567890",
                 "status": "SUCCESS",
                 "consensus_timestamp": "2026-04-03T12:00:00.123Z",
-                "charged_tx_fee": 100000
+                "charged_tx_fee": 100000,
+                "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1/transactions/0-0-12345-1234567890-000000000",
+                "agent_id": "agent_abc123",
+                "task_id": "task_xyz789"
+            }
+        }
+
+
+class ReceiptVerificationResponse(BaseModel):
+    """
+    Response schema for mirror node receipt verification.
+
+    Returned by GET /api/v1/hedera/payments/{transaction_id}/verify.
+    Provides verification status from the Hedera mirror node with a
+    direct link for independent verification.
+
+    Issue #189: Payment Receipt Verification
+    """
+    verified: bool = Field(
+        ...,
+        description="True if the transaction is verified on the mirror node (status=SUCCESS)"
+    )
+    transaction_status: str = Field(
+        ...,
+        description="Transaction status returned by the Hedera mirror node"
+    )
+    mirror_node_url: str = Field(
+        ...,
+        description="Direct URL to this transaction on the Hedera mirror node"
+    )
+    consensus_timestamp: Optional[str] = Field(
+        default=None,
+        description="ISO timestamp when the transaction reached consensus (if settled)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "verified": True,
+                "transaction_status": "SUCCESS",
+                "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1/transactions/0-0-12345-1234567890-000000000",
+                "consensus_timestamp": "2026-04-03T12:00:00Z"
             }
         }

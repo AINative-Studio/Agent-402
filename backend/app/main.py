@@ -17,6 +17,7 @@ Epic 9, Issue 43: Distinguish PATH_NOT_FOUND vs RESOURCE_NOT_FOUND 404 errors.
 
 Reference: backend/app/schemas/errors.py for error response schemas.
 """
+import os
 import logging
 from datetime import datetime
 from fastapi import FastAPI, Request, status
@@ -73,6 +74,20 @@ from app.api.wallet_status import router as wallet_status_router
 from app.api.hedera_payments import router as hedera_payments_router
 # Issue #188: Hedera Agent Wallet Creation
 from app.api.hedera_wallets import router as hedera_wallets_router
+# Epic 17: Agent Identity on Hedera (created by parallel agent group)
+try:
+    from app.api.hedera_identity import router as hedera_identity_router
+    _hedera_identity_router_available = True
+except ImportError:
+    hedera_identity_router = None
+    _hedera_identity_router_available = False
+# Epic 18: Reputation System on Hedera (created by parallel agent group)
+try:
+    from app.api.hedera_reputation import router as hedera_reputation_router
+    _hedera_reputation_router_available = True
+except ImportError:
+    hedera_reputation_router = None
+    _hedera_reputation_router_available = False
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -206,14 +221,21 @@ async def x402_discovery():
         - signature_methods: List of supported signature algorithms (["ECDSA"])
         - server_info: Server name and description
     """
+    # Issue #190: include Hedera metadata while preserving all existing fields
     return {
         "version": "1.0",
         "endpoint": "/x402",
-        "supported_dids": ["did:ethr"],
-        "signature_methods": ["ECDSA"],
+        "supported_dids": ["did:ethr", "did:hedera"],
+        "signature_methods": ["ECDSA", "Ed25519"],
         "server_info": {
             "name": "ZeroDB Agent Finance API",
             "description": "Autonomous Fintech Agent Crew - AINative Edition"
+        },
+        "hedera": {
+            "network": os.environ.get("HEDERA_NETWORK", "testnet"),
+            "usdc_token_id": "0.0.456858",
+            "operator_account_id": os.environ.get("HEDERA_OPERATOR_ID", ""),
+            "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1"
         }
     }
 
@@ -449,6 +471,12 @@ app.include_router(wallet_status_router)
 app.include_router(hedera_payments_router)
 # Issue #188: Hedera Agent Wallet Creation
 app.include_router(hedera_wallets_router)
+# Epic 17: Agent Identity on Hedera (registered when module is available)
+if _hedera_identity_router_available and hedera_identity_router is not None:
+    app.include_router(hedera_identity_router)
+# Epic 18: Reputation System on Hedera (registered when module is available)
+if _hedera_reputation_router_available and hedera_reputation_router is not None:
+    app.include_router(hedera_reputation_router)
 
 
 # Root endpoint
