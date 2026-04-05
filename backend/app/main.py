@@ -108,6 +108,32 @@ try:
     from app.api.openclaw_agents import router as openclaw_agents_router
 except ImportError:
     openclaw_agents_router = None
+# Sprint 4 - Epic 22: Real-Time Events
+try:
+    from app.api.websocket_events import router as websocket_events_router
+    from app.api.sse_events import router as sse_events_router
+except ImportError:
+    websocket_events_router = sse_events_router = None
+# Sprint 4 - Epic 24: Threads
+try:
+    from app.api.threads import router as threads_router
+except ImportError:
+    threads_router = None
+# Sprint 4 - Epic 23: Marketplace
+try:
+    from app.api.marketplace import router as marketplace_router
+except ImportError:
+    marketplace_router = None
+# Sprint 4 - Epic 28: Trustless V1
+try:
+    from app.api.trustless import router as trustless_router
+except ImportError:
+    trustless_router = None
+# Sprint 4 - Epic 26: Billing
+try:
+    from app.api.billing import router as billing_router
+except ImportError:
+    billing_router = None
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -509,6 +535,23 @@ if memory_decay_router is not None:
 # Sprint 3 - Epic 27: OpenClaw Agents (registered when module is available)
 if openclaw_agents_router is not None:
     app.include_router(openclaw_agents_router)
+# Sprint 4 - Epic 22: Real-Time Events (registered when modules are available)
+if websocket_events_router is not None:
+    app.include_router(websocket_events_router)
+if sse_events_router is not None:
+    app.include_router(sse_events_router)
+# Sprint 4 - Epic 24: Threads (registered when module is available)
+if threads_router is not None:
+    app.include_router(threads_router)
+# Sprint 4 - Epic 23: Marketplace (registered when module is available)
+if marketplace_router is not None:
+    app.include_router(marketplace_router)
+# Sprint 4 - Epic 28: Trustless V1 (registered when module is available)
+if trustless_router is not None:
+    app.include_router(trustless_router)
+# Sprint 4 - Epic 26: Billing (registered when module is available)
+if billing_router is not None:
+    app.include_router(billing_router)
 
 
 # Root endpoint
