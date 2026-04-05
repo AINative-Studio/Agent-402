@@ -28,6 +28,15 @@ from app.api.rows import router as rows_router
 from app.api.agent_interactions import router as agent_interactions_router
 # Issue #114: Circle Wallets and USDC Payments
 from app.api.circle import router as circle_router
+# Sprint 4 — Real-time events and threads (Issues #211, #212, #218-#220)
+try:
+    from app.api.sse_events import router as sse_events_router
+    from app.api.threads import router as threads_router
+    _realtime_routers_available = True
+except ImportError:
+    sse_events_router = None
+    threads_router = None
+    _realtime_routers_available = False
 
 
 # Create FastAPI application
@@ -281,6 +290,10 @@ app.include_router(rows_router)
 app.include_router(agent_interactions_router)
 # Issue #114: Circle Wallets and USDC Payments
 app.include_router(circle_router)
+# Sprint 4 — Real-time events and threads (Issues #211, #212, #218-#220)
+if _realtime_routers_available:
+    app.include_router(sse_events_router)
+    app.include_router(threads_router)
 
 
 # Root endpoint

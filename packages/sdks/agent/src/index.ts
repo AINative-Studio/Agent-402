@@ -32,6 +32,8 @@ import { AgentsModule } from './agents';
 import { MemoryModule } from './memory';
 import { VectorsModule } from './vectors';
 import { FilesModule } from './files';
+import { EventsModule } from './events';
+import { ThreadsModule } from './threads';
 import type { AINativeSDKConfig } from './types';
 
 export class AINativeSDK {
@@ -47,12 +49,20 @@ export class AINativeSDK {
   /** File operations — Issue #180 */
   readonly files: FilesModule;
 
+  /** Real-time event subscriptions (WebSocket + SSE) — Issue #213 */
+  readonly events: EventsModule;
+
+  /** Persistent conversation thread management — Issue #221 */
+  readonly threads: ThreadsModule;
+
   constructor(config: AINativeSDKConfig) {
     const client = new HttpClient(config);
     this.agents = new AgentsModule(client);
     this.memory = new MemoryModule(client);
     this.vectors = new VectorsModule(client);
     this.files = new FilesModule(client);
+    this.events = new EventsModule(client);
+    this.threads = new ThreadsModule(client);
   }
 }
 
@@ -62,6 +72,8 @@ export { AgentsModule } from './agents';
 export { MemoryModule } from './memory';
 export { VectorsModule } from './vectors';
 export { FilesModule } from './files';
+export { EventsModule } from './events';
+export { ThreadsModule } from './threads';
 export {
   AINativeSDKError,
   AuthenticationError,
