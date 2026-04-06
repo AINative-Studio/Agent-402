@@ -180,18 +180,18 @@ class DescribeBootstrapLyra:
 # ---------------------------------------------------------------------------
 
 class DescribeBootstrapAll:
-    """Tests for OpenClawAgentBootstrap.bootstrap_all."""
+    """Tests for OpenClawAgentBootstrap.bootstrap_all (Sprint 3 agents)."""
 
     @pytest.mark.asyncio
-    async def it_returns_a_list_of_three_configs(self, bootstrap):
+    async def it_returns_a_list_of_at_least_three_configs(self, bootstrap):
         configs = await bootstrap.bootstrap_all()
-        assert len(configs) == 3
+        assert len(configs) >= 3
 
     @pytest.mark.asyncio
-    async def it_includes_all_three_agent_names(self, bootstrap):
+    async def it_includes_sprint3_agent_names(self, bootstrap):
         configs = await bootstrap.bootstrap_all()
         names = {c.name for c in configs}
-        assert names == {"atlas", "sage", "lyra"}
+        assert {"atlas", "sage", "lyra"}.issubset(names)
 
     @pytest.mark.asyncio
     async def it_returns_valid_agent_config_objects(self, bootstrap):
@@ -244,14 +244,15 @@ class DescribeBootstrapResult:
         from app.schemas.openclaw_agents import BootstrapResult
         configs = await bootstrap.bootstrap_all()
         result = BootstrapResult(agents=configs)
-        assert result.agent_count == 3
+        assert result.agent_count == 8
 
     @pytest.mark.asyncio
     async def it_exposes_agent_names_list(self, bootstrap):
         from app.schemas.openclaw_agents import BootstrapResult
         configs = await bootstrap.bootstrap_all()
         result = BootstrapResult(agents=configs)
-        assert set(result.agent_names) == {"atlas", "sage", "lyra"}
+        expected = {"atlas", "sage", "lyra", "aurora", "nova", "luma", "vega", "helios"}
+        assert set(result.agent_names) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -272,3 +273,303 @@ async def bootstrap_with_agents():
     instance = OpenClawAgentBootstrap()
     await instance.bootstrap_all()
     return instance
+
+
+# ---------------------------------------------------------------------------
+# Issue #232 — Bootstrap aurora (QA)
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapAurora:
+    """Tests for OpenClawAgentBootstrap.bootstrap_aurora."""
+
+    @pytest.mark.asyncio
+    async def it_returns_an_agent_config(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        assert config is not None
+
+    @pytest.mark.asyncio
+    async def it_sets_agent_name_to_aurora(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        assert config.name == "aurora"
+
+    @pytest.mark.asyncio
+    async def it_sets_role_to_qa(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        assert config.role == "qa"
+
+    @pytest.mark.asyncio
+    async def it_includes_required_capabilities(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        expected = {"test_planning", "test_execution", "bug_reporting", "coverage_analysis"}
+        assert expected == set(config.capabilities)
+
+    @pytest.mark.asyncio
+    async def it_sets_a_non_empty_system_prompt(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        assert isinstance(config.system_prompt, str)
+        assert len(config.system_prompt) > 0
+
+    @pytest.mark.asyncio
+    async def it_includes_required_tools(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        tool_names = {t.name for t in config.tools}
+        expected = {"test_runner", "coverage_reporter", "bug_tracker", "regression_detector"}
+        assert expected == tool_names
+
+    @pytest.mark.asyncio
+    async def it_gives_each_tool_a_description(self, bootstrap):
+        config = await bootstrap.bootstrap_aurora()
+        for tool in config.tools:
+            assert isinstance(tool.description, str)
+            assert len(tool.description) > 0
+
+    @pytest.mark.asyncio
+    async def it_registers_aurora_in_registry(self, bootstrap):
+        await bootstrap.bootstrap_aurora()
+        config = await bootstrap.get_agent_config("aurora")
+        assert config is not None
+        assert config.name == "aurora"
+
+
+# ---------------------------------------------------------------------------
+# Issue #233 — Bootstrap nova (Security)
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapNova:
+    """Tests for OpenClawAgentBootstrap.bootstrap_nova."""
+
+    @pytest.mark.asyncio
+    async def it_returns_an_agent_config(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        assert config is not None
+
+    @pytest.mark.asyncio
+    async def it_sets_agent_name_to_nova(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        assert config.name == "nova"
+
+    @pytest.mark.asyncio
+    async def it_sets_role_to_security(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        assert config.role == "security"
+
+    @pytest.mark.asyncio
+    async def it_includes_required_capabilities(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        expected = {
+            "vulnerability_scanning", "code_audit",
+            "dependency_check", "threat_modeling",
+        }
+        assert expected == set(config.capabilities)
+
+    @pytest.mark.asyncio
+    async def it_sets_a_non_empty_system_prompt(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        assert isinstance(config.system_prompt, str)
+        assert len(config.system_prompt) > 0
+
+    @pytest.mark.asyncio
+    async def it_includes_required_tools(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        tool_names = {t.name for t in config.tools}
+        expected = {
+            "dependency_scanner", "owasp_checker",
+            "secret_detector", "cve_lookup",
+        }
+        assert expected == tool_names
+
+    @pytest.mark.asyncio
+    async def it_gives_each_tool_a_description(self, bootstrap):
+        config = await bootstrap.bootstrap_nova()
+        for tool in config.tools:
+            assert isinstance(tool.description, str)
+            assert len(tool.description) > 0
+
+    @pytest.mark.asyncio
+    async def it_registers_nova_in_registry(self, bootstrap):
+        await bootstrap.bootstrap_nova()
+        config = await bootstrap.get_agent_config("nova")
+        assert config is not None
+        assert config.name == "nova"
+
+
+# ---------------------------------------------------------------------------
+# Issue #234 — Bootstrap luma (Data)
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapLuma:
+    """Tests for OpenClawAgentBootstrap.bootstrap_luma."""
+
+    @pytest.mark.asyncio
+    async def it_returns_an_agent_config(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        assert config is not None
+
+    @pytest.mark.asyncio
+    async def it_sets_agent_name_to_luma(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        assert config.name == "luma"
+
+    @pytest.mark.asyncio
+    async def it_sets_role_to_data(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        assert config.role == "data"
+
+    @pytest.mark.asyncio
+    async def it_includes_required_capabilities(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        expected = {"data_pipeline", "etl", "analytics"}
+        assert expected.issubset(set(config.capabilities))
+
+    @pytest.mark.asyncio
+    async def it_sets_a_non_empty_system_prompt(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        assert isinstance(config.system_prompt, str)
+        assert len(config.system_prompt) > 0
+
+    @pytest.mark.asyncio
+    async def it_has_at_least_one_tool(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        assert len(config.tools) >= 1
+
+    @pytest.mark.asyncio
+    async def it_gives_each_tool_a_description(self, bootstrap):
+        config = await bootstrap.bootstrap_luma()
+        for tool in config.tools:
+            assert isinstance(tool.description, str)
+            assert len(tool.description) > 0
+
+
+# ---------------------------------------------------------------------------
+# Issue #234 — Bootstrap vega (DevOps)
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapVega:
+    """Tests for OpenClawAgentBootstrap.bootstrap_vega."""
+
+    @pytest.mark.asyncio
+    async def it_returns_an_agent_config(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        assert config is not None
+
+    @pytest.mark.asyncio
+    async def it_sets_agent_name_to_vega(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        assert config.name == "vega"
+
+    @pytest.mark.asyncio
+    async def it_sets_role_to_devops(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        assert config.role == "devops"
+
+    @pytest.mark.asyncio
+    async def it_includes_required_capabilities(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        expected = {"ci_cd", "monitoring", "deployment"}
+        assert expected.issubset(set(config.capabilities))
+
+    @pytest.mark.asyncio
+    async def it_sets_a_non_empty_system_prompt(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        assert isinstance(config.system_prompt, str)
+        assert len(config.system_prompt) > 0
+
+    @pytest.mark.asyncio
+    async def it_has_at_least_one_tool(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        assert len(config.tools) >= 1
+
+    @pytest.mark.asyncio
+    async def it_gives_each_tool_a_description(self, bootstrap):
+        config = await bootstrap.bootstrap_vega()
+        for tool in config.tools:
+            assert isinstance(tool.description, str)
+            assert len(tool.description) > 0
+
+
+# ---------------------------------------------------------------------------
+# Issue #234 — Bootstrap helios (Documentation)
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapHelios:
+    """Tests for OpenClawAgentBootstrap.bootstrap_helios."""
+
+    @pytest.mark.asyncio
+    async def it_returns_an_agent_config(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        assert config is not None
+
+    @pytest.mark.asyncio
+    async def it_sets_agent_name_to_helios(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        assert config.name == "helios"
+
+    @pytest.mark.asyncio
+    async def it_sets_role_to_docs(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        assert config.role == "docs"
+
+    @pytest.mark.asyncio
+    async def it_includes_required_capabilities(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        expected = {"api_docs", "guides", "changelog"}
+        assert expected.issubset(set(config.capabilities))
+
+    @pytest.mark.asyncio
+    async def it_sets_a_non_empty_system_prompt(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        assert isinstance(config.system_prompt, str)
+        assert len(config.system_prompt) > 0
+
+    @pytest.mark.asyncio
+    async def it_has_at_least_one_tool(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        assert len(config.tools) >= 1
+
+    @pytest.mark.asyncio
+    async def it_gives_each_tool_a_description(self, bootstrap):
+        config = await bootstrap.bootstrap_helios()
+        for tool in config.tools:
+            assert isinstance(tool.description, str)
+            assert len(tool.description) > 0
+
+
+# ---------------------------------------------------------------------------
+# Updated bootstrap_all — all 8 agents
+# ---------------------------------------------------------------------------
+
+class DescribeBootstrapAllExtended:
+    """Tests for bootstrap_all after adding aurora, nova, luma, vega, helios."""
+
+    @pytest.mark.asyncio
+    async def it_returns_eight_configs(self, bootstrap):
+        configs = await bootstrap.bootstrap_all()
+        assert len(configs) == 8
+
+    @pytest.mark.asyncio
+    async def it_includes_all_eight_agent_names(self, bootstrap):
+        configs = await bootstrap.bootstrap_all()
+        names = {c.name for c in configs}
+        expected = {"atlas", "sage", "lyra", "aurora", "nova", "luma", "vega", "helios"}
+        assert names == expected
+
+    @pytest.mark.asyncio
+    async def it_returns_valid_agent_config_objects(self, bootstrap):
+        from app.schemas.openclaw_agents import AgentConfig
+        configs = await bootstrap.bootstrap_all()
+        for config in configs:
+            assert isinstance(config, AgentConfig)
+
+    @pytest.mark.asyncio
+    async def it_registers_all_agents_in_registry(self, bootstrap):
+        await bootstrap.bootstrap_all()
+        for name in ("atlas", "sage", "lyra", "aurora", "nova", "luma", "vega", "helios"):
+            config = await bootstrap.get_agent_config(name)
+            assert config is not None, f"Agent '{name}' not found in registry"
+
+    @pytest.mark.asyncio
+    async def it_returns_bootstrap_result_with_count_eight(self, bootstrap):
+        from app.schemas.openclaw_agents import BootstrapResult
+        configs = await bootstrap.bootstrap_all()
+        result = BootstrapResult(agents=configs)
+        assert result.agent_count == 8
