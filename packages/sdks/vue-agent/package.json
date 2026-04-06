@@ -1,0 +1,10 @@
+{
+  "name": "@ainative/vue-agent",
+  "version": "0.1.0",
+  "description": "AINative Agent SDK for Vue 3",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "test": "jest --coverage --maxWorkers=1", "build": "tsc" },
+  "dependencies": { "@ainative/agent-sdk": "^0.1.0" },
+  "devDependencies": { "typescript": "^5.0.0", "jest": "^29.0.0", "ts-jest": "^29.0.0", "@types/jest": "^29.0.0" }
+}
