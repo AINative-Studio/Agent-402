@@ -219,15 +219,28 @@ result = await service.query_directory(capability="finance")
 
 ---
 
+## Observability (Sprint 5)
+
+Sprint 5 adds a full observability layer on top of the Hedera and ZeroDB integrations:
+
+- **Decision logging** — every agent decision is recorded with structured metadata for replay and audit
+- **Anomaly detection** — spend and behaviour patterns are monitored against baselines in real time
+- **Spend drift monitoring** — per-agent budget thresholds trigger alerts and auto-settlement workflows
+- **Webhooks** — outbound event hooks notify external systems of compliance outcomes, payments, and reputation changes
+- **Analytics dashboard** — aggregated metrics across agents, runs, and tasks via the `/analytics` endpoint
+
+---
+
 ## SDKs
 
 | Package | Language | Description |
 |---------|----------|-------------|
-| `@ainative/react-sdk` | TypeScript/React | AI chat and agent UI components |
-| `@ainative/next-sdk` | TypeScript/Next.js | Server-side agent integration |
-| `@ainative/svelte-sdk` | TypeScript/Svelte | Svelte agent components |
-| `@ainative/vue-sdk` | TypeScript/Vue 3 | Vue agent composables |
-| `hedera-agent-kit` | TypeScript | Hedera HCS/HTS plugin for AI frameworks |
+| `@ainative/agent-sdk` | TypeScript | Agent SDK — CRUD, memory, vectors, files |
+| `ainative-agent` | Python | Python agent SDK — mirrors TypeScript SDK |
+| `@ainative/next-agent` | TypeScript/Next.js | Next.js server-side operations |
+| `@ainative/svelte-agent` | TypeScript/Svelte | Svelte stores |
+| `@ainative/vue-agent` | TypeScript/Vue 3 | Vue 3 composables |
+| `@ainative/hedera-agent-kit-plugin` | TypeScript | Hedera Agent Kit plugin |
 
 See `packages/` directory and `docs/sdk/` for quickstart guides.
 
@@ -249,10 +262,13 @@ See `packages/` directory and `docs/sdk/` for quickstart guides.
 │   └── requirements.txt
 │
 ├── packages/
-│   ├── react-sdk/            # @ainative/react-sdk
-│   ├── next-sdk/             # @ainative/next-sdk
-│   ├── svelte-sdk/           # @ainative/svelte-sdk
-│   └── vue-sdk/              # @ainative/vue-sdk
+│   ├── sdks/
+│   │   ├── agent/            # @ainative/agent-sdk (TypeScript SDK)
+│   │   ├── python-agent/     # ainative-agent (Python SDK)
+│   │   ├── next-agent/       # @ainative/next-agent
+│   │   ├── svelte-agent/     # @ainative/svelte-agent
+│   │   └── vue-agent/        # @ainative/vue-agent
+│   └── hedera-agent-kit-plugin/  # @ainative/hedera-agent-kit-plugin
 │
 ├── scripts/
 │   ├── demo_consensus_2026.py   # 5-minute live demo (Issue #249)
@@ -268,7 +284,7 @@ See `packages/` directory and `docs/sdk/` for quickstart guides.
 │   ├── sdk/                  # SDK quickstart guides
 │   └── testing/              # Test strategy and coverage reports
 │
-├── frontend/                 # Frontend application
+├── frontend/ (planned)       # Agent dashboard UI — Sprint 5
 ├── contracts/                # Smart contract definitions
 ├── tests/                    # Smoke tests
 ├── .env.example
