@@ -95,8 +95,9 @@ Git hooks installed in `.git/hooks/`:
 
 ## Current Focus
 
-Targeting **Consensus 2026** with Hedera integration across 4 sprints:
+Targeting **Consensus 2026** with Hedera integration across 5 sprints:
 - Sprint 1: Agent SDK, Hedera Agent Kit Plugin, x402 on Hedera
 - Sprint 2: Agent Identity (DID/HTS), Reputation system, Phase 2 payments
 - Sprint 3: OpenConvAI (HCS-10), Memory Decay, OpenClaw agents
 - Sprint 4: Marketplace, Real-Time Events, Threads, SDK Expansion, Billing, Trustless V1
+- Sprint 5: Observability & Analytics — decision logging, anomaly detection, spend drift monitoring, webhooks, analytics dashboard, PRD acceptance tests

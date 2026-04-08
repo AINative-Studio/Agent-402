@@ -134,6 +134,15 @@ try:
     from app.api.billing import router as billing_router
 except ImportError:
     billing_router = None
+# Sprint 5 - Observability & Analytics
+try:
+    from app.api.analytics import router as analytics_router
+except ImportError:
+    analytics_router = None
+try:
+    from app.api.webhooks import router as webhooks_router
+except ImportError:
+    webhooks_router = None
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -552,6 +561,11 @@ if trustless_router is not None:
 # Sprint 4 - Epic 26: Billing (registered when module is available)
 if billing_router is not None:
     app.include_router(billing_router)
+# Sprint 5 - Observability & Analytics (registered when modules are available)
+if analytics_router is not None:
+    app.include_router(analytics_router)
+if webhooks_router is not None:
+    app.include_router(webhooks_router)
 
 
 # Root endpoint
