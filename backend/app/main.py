@@ -143,6 +143,16 @@ try:
     from app.api.webhooks import router as webhooks_router
 except ImportError:
     webhooks_router = None
+# Post-Launch - Plugin System
+try:
+    from app.api.plugins import router as plugins_router
+except ImportError:
+    plugins_router = None
+# Post-Launch - Hedera Audit
+try:
+    from app.api.hedera_audit import router as hedera_audit_router
+except ImportError:
+    hedera_audit_router = None
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
 
 
@@ -566,6 +576,12 @@ if analytics_router is not None:
     app.include_router(analytics_router)
 if webhooks_router is not None:
     app.include_router(webhooks_router)
+# Post-Launch - Plugin System (registered when module is available)
+if plugins_router is not None:
+    app.include_router(plugins_router)
+# Post-Launch - Hedera Audit (registered when module is available)
+if hedera_audit_router is not None:
+    app.include_router(hedera_audit_router)
 
 
 # Root endpoint
