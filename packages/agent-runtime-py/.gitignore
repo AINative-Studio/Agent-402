@@ -1,0 +1,11 @@
+__pycache__/
+*.py[codz]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+coverage/
+.coverage
+htmlcov/
+node_modules/
