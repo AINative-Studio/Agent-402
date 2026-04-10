@@ -2,9 +2,9 @@
 
 ## Vibe Code a Trustless AI Agent on Hedera
 
-**Duration:** 3 hours (3:00 PM - 6:00 PM)
-**Format:** Hands-on, AI pair programming, no lectures
-**Audience:** Developers and vibe coders (non-technical welcome)
+- **Duration:** 3 hours (3:00 PM - 6:00 PM)
+- **Format:** Hands-on, AI pair programming, no lectures
+- **Audience:** Developers and vibe coders (non-technical welcome)
 
 ---
 
