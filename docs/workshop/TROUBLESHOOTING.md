@@ -109,11 +109,33 @@ Keep this terminal open. Open a NEW terminal for API calls.
 
 **Fix:** Add the `X-API-Key` header to your requests:
 ```bash
-curl -H "X-API-Key: test_zerodb_key_change_in_production" \
+curl -H "X-API-Key: demo_key_user1_abc123" \
   http://localhost:8000/api/v1/agents
 ```
 
 For workshop/development, the default test key works.
+
+---
+
+## 7a. "ZeroDB connection failed" / 500 errors on agent or memory endpoints
+
+**Problem:** Missing or wrong `ZERODB_API_KEY` / `ZERODB_PROJECT_ID`. Any call that touches agent CRUD, agent memory, or cognitive memory will 500 without them.
+
+**Fix:**
+
+1. Visit [https://www.ainative.studio/developer-settings](https://www.ainative.studio/developer-settings), sign in, and generate an API key tied to a project.
+2. Add both values to `backend/.env` (see Vibe Coder Guide Step 4.5):
+   ```bash
+   ZERODB_API_KEY=ZDB_XXXXXXXXXXXX
+   ZERODB_PROJECT_ID=proj_YYYYYYYY
+   ```
+3. Restart the server so the new env vars are picked up.
+
+**Verify:**
+```bash
+curl -H "X-API-Key: demo_key_user1_abc123" http://localhost:8000/v1/public/projects
+```
+A 200 response with a JSON list confirms ZeroDB is reachable. A 500 with `ZERODB_ERROR` or `ZeroDBClient running in mock mode` log message means credentials are still missing.
 
 ---
 

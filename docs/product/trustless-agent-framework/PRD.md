@@ -1,8 +1,26 @@
-# PRD: Trustless Autonomous Agent Framework (ERC-8004 + x402)
+# PRD: Trustless Autonomous Agent Framework (Hedera + x402)
 
-**Status:** Planning
+**Status:** In Progress — Epics 17–20 delivered on Hedera (HTS identity, HCS anchoring, HCS-10 messaging, HCS-14 directory, reputation). See `BUILD_ROADMAP.md` and Agent-402 Sprint 1–5 deliverables for the implemented subset.
+
 **Audience:** Engineering, Protocol, Agent Runtime, Infra
 **Primary Goal:** Enable lightweight, gas-minimal, trustable, self-governing autonomous agents anchored to blockchain trust primitives but operating off-chain.
+
+> **Hedera-native implementation note (Refs #299):** The ERC-8004 and EIP-712
+> primitives this PRD was originally drafted against were replaced during
+> implementation by Hedera-native equivalents:
+>
+> | Original (Ethereum)       | Agent-402 implementation (Hedera)       |
+> |---------------------------|-----------------------------------------|
+> | ERC-8004 registries       | HCS-14 agent directory topic            |
+> | ERC-721 identity NFT      | HTS non-fungible token (mint per agent) |
+> | EIP-712 signed requests   | x402 payloads signed with `did:hedera`  |
+> | On-chain event log        | Hedera Consensus Service (HCS) topic    |
+> | Ethereum "court record"   | Hedera mirror node (public ledger)      |
+>
+> Trust tier progression, payment settlement (USDC on HTS), and reputation
+> scoring remain unchanged — the change is which blockchain primitives
+> back them. ERC-* references later in this document are historical; the
+> behavior they describe now runs on the Hedera primitives above.
 
 ---
 
@@ -31,7 +49,7 @@ Build a **Trustless Agent Framework** where:
 * Agents are **self-governing**, not DAO-governed
 * The system works for **low-risk and high-risk tasks** via progressive trust
 
-> Ethereum is used as a **court record**, not a runtime.
+> Hedera is used as a **court record**, not a runtime — HCS topics (consensus-ordered event log) and HTS (identity NFTs + USDC settlement) anchor trust, while agent reasoning and coordination happen off-chain.
 
 ---
 
@@ -67,7 +85,7 @@ Build a **Trustless Agent Framework** where:
 
 ---
 
-## 5. Agent Identity (ERC-8004 Based)
+## 5. Agent Identity (Hedera-Native)
 
 ### Purpose
 
@@ -76,19 +94,20 @@ Provide each agent with a **globally unique, censorship-resistant identity**.
 ### Requirements
 
 * Each agent has:
-  * A unique `agentId` (ERC-721 token)
-  * A resolvable `agentURI`
-* `agentURI` points to an **Agent Registration File** (JSON)
-* The registration file advertises:
-  * Agent name, description
+  * A unique `agentId` minted as an **HTS non-fungible token** (one NFT per agent; Hedera's HIP-17 / HTS)
+  * A resolvable DID in `did:hedera:{network}:{topic-id}` form
+* The DID document lives on an HCS topic and advertises:
+  * Agent name, description, role
   * Supported endpoints (MCP, A2A, HTTP)
   * Supported trust models
   * Whether x402 payments are supported
+* Discovery via the **HCS-14 directory topic** (append-only registry).
 
 ### Non-Goals
 
 * No on-chain storage of agent logic
 * No on-chain execution of agent tasks
+* No EVM smart contracts required — all identity operations are HTS + HCS transactions.
 
 ---
 
@@ -96,10 +115,10 @@ Provide each agent with a **globally unique, censorship-resistant identity**.
 
 Each agent runs as an autonomous service with:
 
-* A cryptographic identity (EIP-712 signer)
-* Local or distributed memory
+* A cryptographic identity signed with its `did:hedera` key (Ed25519 or ECDSA per HIP-540)
+* Local or distributed memory (ZeroDB vectors + HCS content-hash anchors)
 * A policy engine for self-governance
-* Access to blockchain indexers
+* Access to Hedera mirror-node indexers
 * Optional validator integrations
 
 ### Self-Governance Policy
@@ -273,7 +292,7 @@ Agents declare which tiers they support.
 
 ## 14. Non-Goals (Explicit)
 
-* No agent logic on Ethereum
+* No agent logic on-chain (neither Ethereum smart contracts nor Hedera smart contracts)
 * No DAO governance
 * No universal scoring algorithm
 * No forced monetization
