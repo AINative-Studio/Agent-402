@@ -47,21 +47,11 @@ def _build_app(workshop_mode: bool = False) -> FastAPI:
 
 
 class DescribeCognitiveMemoryStubs:
-    """Stubs for endpoints not yet implemented (S2-S4)."""
+    """Stubs for endpoints not yet implemented (S3, S4)."""
 
     # /remember is implemented in S1 (#309); see test_cognitive_remember.py
-    # for its coverage. Remaining stubs below.
-
-    def it_recall_returns_501(self):
-        app = _build_app()
-        client = TestClient(app)
-
-        response = client.post(
-            f"/v1/public/{DEFAULT_PID}/memory/recall",
-            json={"query": "rate limit?"},
-        )
-
-        assert response.status_code == 501
+    # /recall   is implemented in S2 (#310); see test_cognitive_recall.py
+    # Remaining stubs below.
 
     def it_reflect_returns_501(self):
         app = _build_app()
@@ -147,36 +137,16 @@ class DescribeCognitiveMemorySchemaValidation:
 
         assert response.status_code == 422
 
-    def it_accepts_recall_with_default_weights(self):
-        """Recall request validates without explicit weights."""
-        app = _build_app()
-        client = TestClient(app)
-
-        response = client.post(
-            f"/v1/public/{DEFAULT_PID}/memory/recall",
-            json={"query": "what is the rate limit"},
-        )
-
-        # Passes validation, hits 501 stub — confirms schema accepts it.
-        assert response.status_code == 501
+    # Recall schema validation covered by test_cognitive_recall.py after
+    # S2 (#310) implemented the real handler.
 
 
 class DescribeWorkshopAliasRouting:
     """/api/v1/memory/* must resolve via convention mapping."""
 
-    # /api/v1/memory/remember routing is covered in test_cognitive_remember.py
-    # against the real (non-stub) handler. Remaining stubs below.
-
-    def it_routes_api_v1_memory_recall_to_stub(self):
-        app = _build_app(workshop_mode=True)
-        client = TestClient(app)
-
-        response = client.post(
-            "/api/v1/memory/recall",
-            json={"query": "q"},
-        )
-
-        assert response.status_code == 501
+    # /api/v1/memory/remember routing covered by test_cognitive_remember.py
+    # /api/v1/memory/recall   routing covered by test_cognitive_recall.py
+    # Remaining stubs below.
 
     def it_routes_api_v1_memory_reflect_to_stub(self):
         app = _build_app(workshop_mode=True)
@@ -236,11 +206,15 @@ class DescribeCognitiveMemoryService:
         # for non-matching text in WORKING type we still fall through to OTHER.
         assert svc.categorize("asdfghjkl", CognitiveMemoryType.WORKING) == MemoryCategory.OTHER
 
-    def it_compute_recency_weight_returns_default(self):
+    def it_compute_recency_weight_is_bounded(self):
+        """S2 (#310) replaced the constant-1.0 stub with exponential decay."""
         svc = CognitiveMemoryService()
 
-        assert svc.compute_recency_weight("2026-04-01T00:00:00Z") == 1.0
+        # None timestamp still returns 1.0
         assert svc.compute_recency_weight(None) == 1.0
+        # Decayed weight is in [0, 1]
+        decayed = svc.compute_recency_weight("2026-04-01T00:00:00Z")
+        assert 0.0 <= decayed <= 1.0
 
     def it_compose_relevance_with_default_weights(self):
         svc = CognitiveMemoryService()
