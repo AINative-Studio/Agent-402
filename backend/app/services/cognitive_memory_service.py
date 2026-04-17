@@ -18,7 +18,7 @@ Design:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from app.schemas.cognitive_memory import (
@@ -142,7 +142,7 @@ class CognitiveMemoryService:
         return MemoryCategory.OTHER
 
     # ------------------------------------------------------------------
-    # Recency weighting (real logic lands in S2)
+    # Recency weighting (Refs #310 S2)
     # ------------------------------------------------------------------
 
     def compute_recency_weight(
@@ -151,8 +151,37 @@ class CognitiveMemoryService:
         half_life_days: float = 7.0,
         now: Optional[datetime] = None,
     ) -> float:
-        """Return 1.0 placeholder (no decay). Replaced in S2 (#310)."""
-        return self.DEFAULT_RECENCY_WEIGHT
+        """
+        Exponential decay: `weight = 0.5 ** (age_days / half_life_days)`.
+
+        - `timestamp` is an ISO-8601 string (with or without trailing 'Z').
+        - Missing or malformed timestamps default to 1.0 so downstream
+          ranking still sees them.
+        - `now` is injectable for deterministic tests; defaults to UTC now.
+        """
+        if not timestamp:
+            return 1.0
+
+        ts_str = (
+            timestamp.replace("Z", "+00:00")
+            if timestamp.endswith("Z")
+            else timestamp
+        )
+        try:
+            parsed = datetime.fromisoformat(ts_str)
+        except (ValueError, TypeError):
+            return 1.0
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+
+        now_dt = now or datetime.now(timezone.utc)
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+
+        age_seconds = max((now_dt - parsed).total_seconds(), 0.0)
+        age_days = age_seconds / 86400.0
+        return 0.5 ** (age_days / max(half_life_days, 1e-6))
 
     def compose_relevance(
         self,
