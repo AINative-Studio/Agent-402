@@ -348,3 +348,127 @@ class DescribeCategorizeHeuristic:
         category = svc.categorize("blah", CognitiveMemoryType.WORKING)
 
         assert category == MemoryCategory.OTHER
+
+
+class DescribeHCSAnchorHook:
+    """S5 (#313) wires CognitiveMemoryService.anchor_to_hcs into /remember.
+
+    Anchoring is best-effort: the /remember call always returns 201 (the
+    memory is durable in ZeroDB regardless of HCS availability). The
+    `hcs_anchor_pending` flag reflects whether the HCS anchor succeeded.
+    """
+
+    @pytest.mark.asyncio
+    async def it_computes_sha256_content_hash(self):
+        svc = CognitiveMemoryService()
+
+        h = svc.content_hash("hello")
+
+        # SHA-256("hello") is a well-known value
+        assert h == (
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        )
+
+    @pytest.mark.asyncio
+    async def it_calls_anchor_memory_with_content_hash(self):
+        svc = CognitiveMemoryService()
+        mock_anchoring = SimpleNamespace(
+            anchor_memory=AsyncMock(return_value={"sequence_number": 1})
+        )
+
+        result = await svc.anchor_to_hcs(
+            memory_id="mem_1",
+            content="hello",
+            agent_id="agent_abc",
+            namespace="ns_test",
+            anchoring_service=mock_anchoring,
+        )
+
+        mock_anchoring.anchor_memory.assert_awaited_once()
+        kwargs = mock_anchoring.anchor_memory.call_args.kwargs
+        assert kwargs["memory_id"] == "mem_1"
+        assert kwargs["agent_id"] == "agent_abc"
+        assert kwargs["namespace"] == "ns_test"
+        assert kwargs["content_hash"] == svc.content_hash("hello")
+        assert result == {"sequence_number": 1}
+
+    @pytest.mark.asyncio
+    async def it_returns_none_when_anchor_fails(self):
+        svc = CognitiveMemoryService()
+
+        async def _boom(**_):
+            raise RuntimeError("HCS down")
+
+        mock_anchoring = SimpleNamespace(anchor_memory=_boom)
+
+        result = await svc.anchor_to_hcs(
+            memory_id="mem_1",
+            content="hello",
+            agent_id="agent_abc",
+            namespace="default",
+            anchoring_service=mock_anchoring,
+        )
+
+        assert result is None
+
+    def it_marks_hcs_anchor_pending_true_when_anchor_fails(self, monkeypatch):
+        app = _build_app()
+        monkeypatch.setattr(
+            "app.api.cognitive.remember.agent_memory_service.store_memory",
+            AsyncMock(return_value=_canned_stored_record()),
+        )
+
+        async def _failed_anchor(**_):
+            return None
+
+        monkeypatch.setattr(
+            "app.api.cognitive.remember.get_cognitive_memory_service",
+            lambda: _StubCognitive(anchor_result=None),
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            f"/v1/public/{DEFAULT_PID}/memory/remember",
+            json={"agent_id": "agent_abc", "content": "hi"},
+        )
+
+        assert response.status_code == 201
+        assert response.json()["hcs_anchor_pending"] is True
+
+    def it_marks_hcs_anchor_pending_false_when_anchor_succeeds(self, monkeypatch):
+        app = _build_app()
+        monkeypatch.setattr(
+            "app.api.cognitive.remember.agent_memory_service.store_memory",
+            AsyncMock(return_value=_canned_stored_record()),
+        )
+        monkeypatch.setattr(
+            "app.api.cognitive.remember.get_cognitive_memory_service",
+            lambda: _StubCognitive(anchor_result={"sequence_number": 42}),
+        )
+
+        client = TestClient(app)
+        response = client.post(
+            f"/v1/public/{DEFAULT_PID}/memory/remember",
+            json={"agent_id": "agent_abc", "content": "hi"},
+        )
+
+        assert response.status_code == 201
+        assert response.json()["hcs_anchor_pending"] is False
+
+
+class _StubCognitive:
+    """Cognitive service stand-in that records anchor_to_hcs calls."""
+
+    def __init__(self, anchor_result):
+        self._anchor_result = anchor_result
+
+    def score_importance(self, *, memory_type, content, metadata=None, importance_hint=None):
+        if importance_hint is not None:
+            return max(0.0, min(1.0, float(importance_hint)))
+        return 0.5
+
+    def categorize(self, *, content, memory_type):
+        return MemoryCategory.OTHER
+
+    async def anchor_to_hcs(self, **kwargs):
+        return self._anchor_result

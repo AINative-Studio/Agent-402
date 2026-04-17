@@ -92,70 +92,145 @@ Tell your AI:
 
 ---
 
-## Step 7: Store Your Agent's First Memory
+## Step 7: Store Your Agent's First Memory — Cognitive API
+
+The cognitive API wraps raw storage with importance scoring, auto-categorization, and automatic HCS anchoring. One endpoint replaces the old CRUD + explicit-anchor dance.
 
 Tell your AI:
 
-> "Store a memory for my agent using POST http://localhost:8000/api/v1/agent-memory. The agent_id is {agent_id}, run_id is 'workshop-run-1', memory_type is 'decision', content is 'Evaluated market conditions: HBAR/USD stable at 0.08, low volatility. Recommendation: proceed with transaction.', and confidence is 0.92."
+> "Store a memory for my agent using POST http://localhost:8000/api/v1/memory/remember. The agent_id is {agent_id}, content is 'Evaluated market conditions: HBAR/USD stable at 0.08, low volatility. Recommendation: proceed with transaction.', and memory_type is 'episodic'."
 
 **Expected response:**
 ```json
 {
   "memory_id": "mem_abc123...",
-  "status": "stored"
+  "agent_id": "agent_abc123...",
+  "content": "Evaluated market conditions: ...",
+  "memory_type": "episodic",
+  "category": "observation",
+  "importance": 0.62,
+  "namespace": "default",
+  "timestamp": "2026-04-17T...",
+  "hcs_anchor_pending": false
 }
 ```
 
 **Save your `memory_id`.**
 
-**What this means:** Your agent now has a persistent decision record. It can recall this across sessions, runs, and even server restarts.
+**What this means:**
+- `category` — the cognitive API classified your memory automatically (keywords like "evaluated" → `observation`).
+- `importance` — a 0.0–1.0 score derived from memory type, content length, and any priority flags in metadata. Higher = more likely to resurface in recall.
+- `hcs_anchor_pending: false` — the memory's SHA-256 content hash was anchored to the Hedera Consensus Service **as part of the same call**. No separate anchor step needed; if it were `true`, the anchor can be retried later (the memory itself is still durable).
 
 ---
 
-## Step 8: Recall the Memory
+## Step 8: Recall with Relevance + Recency
 
 Tell your AI:
 
-> "Search my agent's memories using POST http://localhost:8000/api/v1/agent-memory/search. Use the query 'market conditions' and agent_id {agent_id}."
-
-**Expected response:** Your stored memory should appear as the top result with a relevance score.
-
-**What this means:** Semantic search — your agent can find relevant memories by meaning, not just exact text match. This is powered by vector embeddings in ZeroDB.
-
----
-
-## Step 9: Store More Memories
-
-Tell your AI:
-
-> "Store two more memories for my agent: (1) A compliance check: 'KYC verification passed for counterparty 0.0.99999. Risk score: LOW.' with confidence 0.98. (2) A transaction decision: 'Approved 10 USDC transfer to 0.0.99999 based on positive market analysis and clean compliance.' with confidence 0.95."
-
-Now try recalling:
-
-> "Search memories for 'compliance' — does it find the KYC memory?"
-> "Search memories for 'transfer approved' — does it find the transaction decision?"
-
----
-
-## Step 10: Anchor a Memory to Hedera
-
-This is the key innovation. Tell your AI:
-
-> "Anchor my agent's memory to Hedera Consensus Service using POST http://localhost:8000/api/v1/anchor/memory. Provide the memory_id from Step 7, a content_hash (SHA-256 of the memory content), agent_id, and namespace 'workshop'."
+> "Recall memories for my agent using POST http://localhost:8000/api/v1/memory/recall. Use the query 'market conditions' and agent_id {agent_id}."
 
 **Expected response:**
 ```json
 {
-  "sequence_number": 42,
-  "topic_id": "0.0.XXXXX",
-  "content_hash": "sha256...",
-  "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1/..."
+  "memories": [
+    {
+      "memory_id": "mem_abc123...",
+      "agent_id": "agent_abc123...",
+      "content": "Evaluated market conditions: ...",
+      "category": "observation",
+      "memory_type": "episodic",
+      "importance": 0.62,
+      "similarity_score": 0.81,
+      "recency_weight": 0.99,
+      "composite_score": 0.73,
+      "timestamp": "2026-04-17T..."
+    }
+  ],
+  "query": "market conditions",
+  "weights": {
+    "similarity": 0.6,
+    "recency": 0.3,
+    "importance": 0.1,
+    "half_life_days": 7.0
+  }
 }
 ```
 
-**Verification:** Open the `mirror_node_url` in your browser. You'll see the anchor record on the Hedera public ledger.
+**What this means:** Three signals combined into one ranking score:
+- **similarity_score** — how close the memory is to your query (vector embedding cosine).
+- **recency_weight** — exponential decay over age (`0.5 ** (age_days / 7)`). Recent memories surface first.
+- **composite_score** — the weighted sum. Pass custom `weights` in the request body to reshape ranking (e.g. boost importance).
 
-**What this means:** This memory is now tamper-evident. If anyone changes the stored memory, the hash won't match the HCS anchor. Your agent's decisions are provably unmodified — critical for compliance, audit, and trust.
+This is how agents "remember what matters" instead of drowning in every past observation.
+
+---
+
+## Step 9: Store More Memories, Then Reflect
+
+Tell your AI:
+
+> "Remember two more memories for my agent via POST http://localhost:8000/api/v1/memory/remember:
+> (1) content 'KYC verification passed for counterparty 0.0.99999. Risk score: LOW.', memory_type 'episodic'.
+> (2) content 'Approved 10 USDC transfer to 0.0.99999 based on positive market analysis.', memory_type 'episodic'."
+
+Now recall by different queries to confirm semantic search still works:
+
+> "Recall memories for 'compliance' — does it find the KYC memory?"
+> "Recall memories for 'transfer approved' — does it find the transaction decision?"
+
+Then try the synthesis endpoints:
+
+> "Generate cognitive insights for my agent using POST http://localhost:8000/api/v1/memory/reflect with agent_id {agent_id}. Look at patterns and contradictions across my memories."
+
+**Expected response:**
+```json
+{
+  "agent_id": "agent_abc123...",
+  "window_days": 30,
+  "memory_count": 3,
+  "patterns": [
+    { "label": "observation", "count": 1, "category": "observation" },
+    { "label": "decision",    "count": 2, "category": "decision"    }
+  ],
+  "contradictions": [],
+  "gaps": [
+    { "category": "plan", "description": "No memories of category 'plan' in the corpus" }
+  ]
+}
+```
+
+Finally, check the agent's cognitive profile:
+
+> "Get the cognitive profile for my agent via GET http://localhost:8000/api/v1/memory/profile/{agent_id}."
+
+**What this means:** `/reflect` gives you top patterns across a window, calls out contradictions (approve/reject on the same topic), and highlights gaps. `/profile/{agent_id}` surfaces the agent's topic distribution and expertise areas (`count × avg_importance`) — handy for routing work to the right agent.
+
+---
+
+## Step 10: Verify the HCS Anchor on the Public Ledger
+
+`/memory/remember` anchors the memory's SHA-256 content hash to Hedera Consensus Service as part of the same call (`hcs_anchor_pending: false` in the response confirms it succeeded). Now verify the anchor is visible on the public ledger.
+
+Tell your AI:
+
+> "Fetch the HCS audit trail for memory {memory_id} via GET http://localhost:8000/api/v1/anchor/{memory_id}/verify. Return the HCS topic_id and sequence number."
+
+**Expected response:**
+```json
+{
+  "memory_id": "mem_abc123...",
+  "content_hash": "sha256...",
+  "verified": true,
+  "sequence_number": 42,
+  "topic_id": "0.0.XXXXX",
+  "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1/topics/0.0.XXXXX/messages/42"
+}
+```
+
+**Verification:** Open the `mirror_node_url` in your browser — you'll see the anchor record on the Hedera public ledger. If anyone modifies the stored memory, its SHA-256 will no longer match this anchor, which is how you prove tamper-evidence.
+
+**What this means:** You didn't have to call an anchor endpoint yourself — the cognitive API did it automatically on write. Your agent's memory is **durable in ZeroDB and tamper-evident on Hedera** in a single operation. That's the full "remember with proof" flow regulated use cases require.
 
 ---
 

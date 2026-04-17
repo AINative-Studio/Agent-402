@@ -18,8 +18,12 @@ Design:
 """
 from __future__ import annotations
 
+import hashlib
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from app.schemas.cognitive_memory import (
     CognitiveMemoryType,
@@ -422,6 +426,61 @@ class CognitiveMemoryService:
             first_memory_at=first_ts,
             last_memory_at=last_ts,
         )
+
+    # ------------------------------------------------------------------
+    # HCS anchoring hook (Refs #313 S5)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def content_hash(content: str) -> str:
+        """Deterministic SHA-256 hex digest of UTF-8 memory content."""
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    async def anchor_to_hcs(
+        self,
+        memory_id: str,
+        content: str,
+        agent_id: str,
+        namespace: str,
+        anchoring_service: Any = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Best-effort anchor of a memory's content hash to HCS.
+
+        Returns the anchoring-service result on success, or None on any
+        failure. Failures are logged but never raise — the caller may
+        still return success to the client because the memory is stored
+        durably in ZeroDB regardless of HCS availability.
+        """
+        if anchoring_service is None:
+            # Lazy import to avoid a circular service-layer dependency.
+            from app.services.hcs_anchoring_service import get_hcs_anchoring_service
+
+            try:
+                anchoring_service = get_hcs_anchoring_service()
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.warning(
+                    "HCS anchoring service unavailable for memory %s: %s",
+                    memory_id,
+                    exc,
+                )
+                return None
+
+        try:
+            return await anchoring_service.anchor_memory(
+                memory_id=memory_id,
+                content_hash=self.content_hash(content),
+                agent_id=agent_id,
+                namespace=namespace,
+            )
+        except Exception as exc:  # best-effort: log, don't raise
+            logger.warning(
+                "HCS anchor failed for memory %s (agent %s): %s",
+                memory_id,
+                agent_id,
+                exc,
+            )
+            return None
 
 
 # Singleton pattern — matches the existing service modules in app/services.
