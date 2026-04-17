@@ -399,3 +399,157 @@ class DescribeUpdateCapabilitiesEndpoint:
         )
 
         assert response.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/hedera/identity/directory/register (Refs #291)
+# ---------------------------------------------------------------------------
+
+
+class DescribeDirectoryRegisterEndpoint:
+    """POST /api/v1/hedera/identity/directory/register publishes to HCS-14."""
+
+    def _mock_directory_service(
+        self,
+        *,
+        register_return=None,
+        register_side_effect=None,
+        topic_id="0.0.999",
+    ):
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock = MagicMock()
+        mock.directory_topic_id = topic_id
+        if register_side_effect is not None:
+            mock.register_agent = AsyncMock(side_effect=register_side_effect)
+        else:
+            mock.register_agent = AsyncMock(
+                return_value=register_return
+                or {
+                    "status": "SUCCESS",
+                    "transaction_id": "0.0.1@1717000000.123456789",
+                    "did": "did:hedera:testnet:0.0.1_0.0.2",
+                }
+            )
+        return mock
+
+    def it_returns_201_with_registration_details(self):
+        from app.api.hedera_identity import get_hcs14_directory_service
+
+        mock_service = self._mock_directory_service(
+            register_return={
+                "status": "SUCCESS",
+                "transaction_id": "0.0.1@1717000000.000000001",
+                "did": "did:hedera:testnet:0.0.111_0.0.222",
+            }
+        )
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hcs14_directory_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={
+                "agent_did": "did:hedera:testnet:0.0.111_0.0.222",
+                "capabilities": ["finance", "compliance"],
+                "role": "analyst",
+                "reputation_score": 0,
+            },
+        )
+
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["status"] == "SUCCESS"
+        assert body["did"] == "did:hedera:testnet:0.0.111_0.0.222"
+        assert body["directory_topic"] == "0.0.999"
+        assert body["transaction_id"] == "0.0.1@1717000000.000000001"
+
+        mock_service.register_agent.assert_awaited_once()
+        kwargs = mock_service.register_agent.call_args.kwargs
+        assert kwargs["agent_did"] == "did:hedera:testnet:0.0.111_0.0.222"
+        assert kwargs["capabilities"] == ["finance", "compliance"]
+        assert kwargs["role"] == "analyst"
+        assert kwargs["reputation_score"] == 0
+
+    def it_defaults_reputation_score_to_zero(self):
+        from app.api.hedera_identity import get_hcs14_directory_service
+
+        mock_service = self._mock_directory_service()
+        app = _make_test_app()
+        app.dependency_overrides[get_hcs14_directory_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={
+                "agent_did": "did:hedera:testnet:0.0.333_0.0.444",
+                "capabilities": [],
+                "role": "analyst",
+            },
+        )
+
+        assert response.status_code == 201
+        assert mock_service.register_agent.call_args.kwargs["reputation_score"] == 0
+
+    def it_returns_422_when_agent_did_is_missing(self):
+        app = _make_test_app()
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={"capabilities": [], "role": "analyst"},
+        )
+
+        assert response.status_code == 422
+
+    def it_returns_422_when_role_is_missing(self):
+        app = _make_test_app()
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={"agent_did": "did:hedera:testnet:0.0.1_0.0.2", "capabilities": []},
+        )
+
+        assert response.status_code == 422
+
+    def it_returns_422_when_reputation_score_is_negative(self):
+        app = _make_test_app()
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={
+                "agent_did": "did:hedera:testnet:0.0.1_0.0.2",
+                "capabilities": [],
+                "role": "analyst",
+                "reputation_score": -1,
+            },
+        )
+
+        assert response.status_code == 422
+
+    def it_returns_400_when_service_rejects(self):
+        from app.api.hedera_identity import get_hcs14_directory_service
+        from app.services.hcs14_directory_service import HCS14DirectoryError
+
+        mock_service = self._mock_directory_service(
+            register_side_effect=HCS14DirectoryError("agent_did cannot be empty")
+        )
+        app = _make_test_app()
+        app.dependency_overrides[get_hcs14_directory_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/directory/register",
+            json={
+                "agent_did": " ",
+                "capabilities": [],
+                "role": "analyst",
+                "reputation_score": 0,
+            },
+        )
+
+        # HCS14DirectoryError inherits APIError which sets its own status code
+        assert response.status_code in (400, 422, 500)

@@ -29,6 +29,8 @@ from app.schemas.hedera_identity import (
     CapabilitiesResponse,
     CapabilitiesUpdateRequest,
     DirectoryQueryResult,
+    DirectoryRegisterRequest,
+    DirectoryRegisterResponse,
     DirectorySearchRequest,
     DIDResolutionResult,
 )
@@ -159,6 +161,51 @@ async def get_agent_did(
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     except HederaDIDError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/hedera/identity/directory/register (Refs #291)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/directory/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DirectoryRegisterResponse,
+    responses={
+        201: {"description": "Agent registered in HCS-14 directory"},
+        400: {"description": "Validation error (empty DID, negative reputation)"},
+        422: {"description": "Request schema validation failed"},
+        502: {"description": "Hedera network error"},
+    },
+    summary="Register agent in HCS-14 directory",
+    description=(
+        "Submits an HCS-14 `register` message for the given agent DID to the "
+        "directory topic. The registered agent becomes discoverable via "
+        "POST /directory/search. Refs #291."
+    ),
+)
+async def register_in_directory(
+    request: DirectoryRegisterRequest,
+    directory_service: HCS14DirectoryService = Depends(get_hcs14_directory_service),
+) -> DirectoryRegisterResponse:
+    """Register an agent in the HCS-14 directory."""
+    try:
+        result = await directory_service.register_agent(
+            agent_did=request.agent_did,
+            capabilities=request.capabilities,
+            role=request.role,
+            reputation_score=request.reputation_score,
+        )
+    except HCS14DirectoryError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    return DirectoryRegisterResponse(
+        status=result.get("status", "SUCCESS"),
+        transaction_id=result.get("transaction_id"),
+        did=result.get("did", request.agent_did),
+        directory_topic=directory_service.directory_topic_id,
+    )
 
 
 # ---------------------------------------------------------------------------
