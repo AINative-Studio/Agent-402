@@ -154,6 +154,8 @@ try:
 except ImportError:
     hedera_audit_router = None
 from app.middleware import APIKeyAuthMiddleware, ImmutableMiddleware
+# Refs #285, #300: Workshop-mode path rewriter for flat /api/v1/* prefix
+from app.middleware.workshop_prefix import WorkshopPrefixMiddleware
 
 
 # Create FastAPI application
@@ -182,6 +184,18 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Workshop-mode path rewriter - must be outermost so downstream middleware
+# (auth, immutable) see the rewritten /v1/public/... path. Gated by
+# settings.workshop_mode so production is unaffected by default.
+# Overrides are populated by B2 (#302) and B3 (#303) for non-conventional
+# prefixes (hcs10, anchor, marketplace).
+app.add_middleware(
+    WorkshopPrefixMiddleware,
+    enabled=settings.workshop_mode,
+    default_project_id=settings.workshop_default_project_id,
+    overrides={},
 )
 
 

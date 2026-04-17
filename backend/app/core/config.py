@@ -112,6 +112,18 @@ class Settings(BaseSettings):
         description="LLM provider to use (gemini, openai, anthropic)"
     )
 
+    # Workshop Mode (Refs #285, #300)
+    # When enabled, /api/v1/* paths are rewritten to /v1/public/{workshop_default_project_id}/*
+    # so tutorials can use a flat prefix without project ids in URLs.
+    workshop_mode: bool = Field(
+        default=False,
+        description="Enable workshop /api/v1/ prefix rewriting"
+    )
+    workshop_default_project_id: str = Field(
+        default="proj_workshop",
+        description="Default project id substituted when rewriting /api/v1/* in workshop mode"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
