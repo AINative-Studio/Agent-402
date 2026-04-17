@@ -546,6 +546,13 @@ app.include_router(events_router)
 app.include_router(compliance_events_router)
 app.include_router(agents_router)
 app.include_router(agent_memory_router)
+# Epic 34 (#292 S0): ZeroMemory Cognitive API — 4 endpoints live in the
+# `app.api.cognitive` package, aggregated under one router.
+try:
+    from app.api.cognitive_memory import router as cognitive_memory_router
+    app.include_router(cognitive_memory_router)
+except ImportError:
+    cognitive_memory_router = None
 app.include_router(x402_requests_router)
 app.include_router(runs_router)
 app.include_router(tables_router)
