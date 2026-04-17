@@ -195,7 +195,14 @@ app.add_middleware(
     WorkshopPrefixMiddleware,
     enabled=settings.workshop_mode,
     default_project_id=settings.workshop_default_project_id,
-    overrides={},
+    overrides={
+        # B2 (#302): HCS anchoring is mounted at `/anchor/*`, not under
+        # /v1/public/{project_id}/, so route it directly.
+        "anchor/": "/anchor/",
+        # B2 (#302, subsumes #295): HCS-10 (OpenConvAI) router lives at
+        # `/hcs10/*` without a project prefix.
+        "hcs10/": "/hcs10/",
+    },
 )
 
 
