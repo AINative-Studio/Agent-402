@@ -329,23 +329,98 @@ class CognitiveMemoryService:
         }
 
     # ------------------------------------------------------------------
-    # Profile building (real logic lands in S4)
+    # Profile building (Refs #312 S4)
     # ------------------------------------------------------------------
+
+    _PROFILE_TOPIC_LIMIT = 10
+    _EXPERTISE_AREA_LIMIT = 5
 
     def build_profile(
         self,
         agent_id: str,
         memories: List[Dict[str, Any]],
     ) -> ProfileResponse:
-        """Return a minimal profile. Replaced in S4 (#312)."""
+        """
+        Compute a cognitive profile from the agent's memory corpus.
+
+        - `categories`: ProfileCategoryStats per MemoryCategory that appears
+          in the corpus, sorted by count desc.
+        - `topics`: top N ProfileTopicCount entries by count, each with an
+          average-importance value. Topics are extracted via
+          `_significant_tokens` (non-stopword, length>=3).
+        - `expertise_areas`: top topics sorted by `count × avg_importance`,
+          capped at 5.
+        - `first_memory_at` / `last_memory_at`: min / max ISO timestamps.
+        """
+        if not memories:
+            return ProfileResponse(agent_id=agent_id, memory_count=0)
+
+        # Categories
+        cat_counts: Dict[MemoryCategory, int] = {}
+        # Topic aggregation: {token: (count, sum_importance)}
+        topic_agg: Dict[str, List[float]] = {}
+        timestamps: List[str] = []
+
+        for m in memories:
+            cat = self._extract_category(m)
+            cat_counts[cat] = cat_counts.get(cat, 0) + 1
+
+            metadata = m.get("metadata", {}) or {}
+            try:
+                importance = float(metadata.get("importance", 0.5))
+            except (TypeError, ValueError):
+                importance = 0.5
+
+            for token in self._significant_tokens(m.get("content") or ""):
+                bucket = topic_agg.setdefault(token, [0, 0.0])
+                bucket[0] += 1
+                bucket[1] += importance
+
+            ts = m.get("timestamp")
+            if isinstance(ts, str) and ts:
+                timestamps.append(ts)
+
+        categories = [
+            ProfileCategoryStats(category=cat, count=count)
+            for cat, count in sorted(
+                cat_counts.items(), key=lambda kv: (-kv[1], kv[0].value)
+            )
+        ]
+
+        topics = [
+            ProfileTopicCount(
+                topic=token,
+                count=count,
+                average_importance=max(0.0, min(1.0, total_imp / count)),
+            )
+            for token, (count, total_imp) in sorted(
+                topic_agg.items(), key=lambda kv: (-kv[1][0], kv[0])
+            )
+        ][: self._PROFILE_TOPIC_LIMIT]
+
+        # Expertise: rank by count × avg_importance
+        expertise_areas = [
+            token
+            for token, _score in sorted(
+                (
+                    (token, count * (total_imp / count))
+                    for token, (count, total_imp) in topic_agg.items()
+                ),
+                key=lambda kv: (-kv[1], kv[0]),
+            )
+        ][: self._EXPERTISE_AREA_LIMIT]
+
+        first_ts = min(timestamps) if timestamps else None
+        last_ts = max(timestamps) if timestamps else None
+
         return ProfileResponse(
             agent_id=agent_id,
             memory_count=len(memories),
-            categories=[],
-            topics=[],
-            expertise_areas=[],
-            first_memory_at=None,
-            last_memory_at=None,
+            categories=categories,
+            topics=topics,
+            expertise_areas=expertise_areas,
+            first_memory_at=first_ts,
+            last_memory_at=last_ts,
         )
 
 

@@ -47,22 +47,12 @@ def _build_app(workshop_mode: bool = False) -> FastAPI:
 
 
 class DescribeCognitiveMemoryStubs:
-    """Stubs for endpoints not yet implemented (S4)."""
+    """All four endpoints now have real implementations (S1-S4)."""
 
     # /remember is implemented in S1 (#309); see test_cognitive_remember.py
     # /recall   is implemented in S2 (#310); see test_cognitive_recall.py
     # /reflect  is implemented in S3 (#311); see test_cognitive_reflect.py
-    # Remaining stubs below.
-
-    def it_profile_returns_501(self):
-        app = _build_app()
-        client = TestClient(app)
-
-        response = client.get(
-            f"/v1/public/{DEFAULT_PID}/memory/profile/agent_abc"
-        )
-
-        assert response.status_code == 501
+    # /profile  is implemented in S4 (#312); see test_cognitive_profile.py
 
 
 class DescribeCognitiveMemorySchemaValidation:
@@ -137,19 +127,12 @@ class DescribeWorkshopAliasRouting:
     # /api/v1/memory/remember routing covered by test_cognitive_remember.py
     # /api/v1/memory/recall   routing covered by test_cognitive_recall.py
     # /api/v1/memory/reflect  routing covered by test_cognitive_reflect.py
-    # Remaining stubs below.
-
-    def it_routes_api_v1_memory_profile_to_stub(self):
-        app = _build_app(workshop_mode=True)
-        client = TestClient(app)
-
-        response = client.get("/api/v1/memory/profile/agent_abc")
-
-        assert response.status_code == 501
+    # /api/v1/memory/profile  routing covered by test_cognitive_profile.py
 
 
 class DescribeCognitiveMemoryService:
-    """S0 service stubs return deterministic placeholders."""
+    """Low-level service smoke tests. Per-method behavior lives in the
+    S1–S4 endpoint test files."""
 
     def it_returns_singleton(self):
         s1 = get_cognitive_memory_service()
