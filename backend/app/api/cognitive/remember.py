@@ -1,15 +1,17 @@
 """
 POST /v1/public/{project_id}/memory/remember — cognitive remember endpoint.
 
-Refs #292, #309 (S1).
+Refs #292, #309 (S1), #313 (S5 HCS anchor hook).
 
 Wraps `AgentMemoryService.store_memory` with:
 - Importance scoring (CognitiveMemoryService.score_importance)
 - Auto-categorization (CognitiveMemoryService.categorize)
+- Best-effort HCS anchoring of the memory's content hash (S5)
 - A stable envelope (`RememberResponse`) matching the TS SDK shape.
 
-HCS anchoring is flagged in the response as `hcs_anchor_pending=True`;
-S5 (#313) wires the HCS anchor call into this handler.
+HCS anchoring is best-effort: if the HCS pipeline fails, the memory is
+still persisted and the handler returns 201 with `hcs_anchor_pending=True`
+so the client knows anchoring can be retried.
 """
 from __future__ import annotations
 
@@ -36,12 +38,14 @@ async def remember(
     project_id: str = Path(..., min_length=1),
 ) -> RememberResponse:
     """
-    Store a memory with auto-computed importance and category.
+    Store a memory with auto-computed importance and category, then anchor
+    the content hash to HCS (best-effort).
 
     The memory goes through the existing `AgentMemoryService` for embedding
     + row persistence. Cognitive enrichment (importance, category) is
     merged into the metadata so downstream `/recall` and `/reflect` can
-    operate on it.
+    operate on it. An HCS anchor is submitted as a best-effort operation;
+    failure is logged but does not fail the request.
     """
     cognitive = get_cognitive_memory_service()
     importance = cognitive.score_importance(
@@ -72,6 +76,13 @@ async def remember(
         metadata=enriched_metadata,
     )
 
+    anchor_result = await cognitive.anchor_to_hcs(
+        memory_id=stored["memory_id"],
+        content=request.content,
+        agent_id=request.agent_id,
+        namespace=request.namespace,
+    )
+
     return RememberResponse(
         memory_id=stored["memory_id"],
         agent_id=stored["agent_id"],
@@ -81,5 +92,5 @@ async def remember(
         importance=importance,
         namespace=stored.get("namespace", request.namespace),
         timestamp=stored.get("timestamp", ""),
-        hcs_anchor_pending=True,
+        hcs_anchor_pending=anchor_result is None,
     )
