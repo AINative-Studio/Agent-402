@@ -310,6 +310,17 @@ cd agent-402
 pip install -r requirements.txt
 ```
 
+> **If you cloned outside the `AINative-Studio` monorepo:** the
+> `.ainative`, `.claude/skills`, and `.claude/commands` symlinks point
+> at a sibling `core/` checkout and will be broken. Fix with:
+>
+> ```bash
+> ./scripts/setup_symlinks.sh --core /path/to/core
+> ```
+>
+> Or see [.claude/SYMLINK_SETUP.md](.claude/SYMLINK_SETUP.md) for the
+> full details.
+
 ### 2. Configure environment
 
 ```bash

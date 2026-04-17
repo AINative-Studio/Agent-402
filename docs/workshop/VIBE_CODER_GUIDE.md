@@ -78,6 +78,32 @@ HEDERA_NETWORK=testnet
 
 ---
 
+## Step 4.5: Get Your ZeroDB API Key
+
+Agent-402 uses ZeroDB for agent memory and vector search. Without a ZeroDB key, any memory-related call (and Tutorial 01 Steps 7+) will fail with 500 errors.
+
+1. Open [https://www.ainative.studio/developer-settings](https://www.ainative.studio/developer-settings) and sign in.
+2. Create a project (or use an existing one) and generate an API key.
+3. Copy both the **API key** and the **project ID**.
+
+Tell your AI:
+
+> "Add my ZeroDB credentials to the .env file. API key is ZDB_XXXXXXXXXXXX and project ID is proj_YYYYYYYY."
+
+Your AI will add these lines:
+```bash
+ZERODB_API_KEY=ZDB_XXXXXXXXXXXX
+ZERODB_PROJECT_ID=proj_YYYYYYYY
+```
+
+**Verification:** After starting the server in Step 5, run:
+```bash
+curl -H "X-API-Key: demo_key_user1_abc123" http://localhost:8000/v1/public/projects
+```
+A 200 response with a JSON list means ZeroDB is connected. A 500 error means the key or project ID is wrong — double-check and restart the server.
+
+---
+
 ## Step 5: Start the Server
 
 Tell your AI:

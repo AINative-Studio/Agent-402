@@ -32,7 +32,7 @@ Tell your AI:
 
 Before your agent can receive USDC, its account must be associated with the USDC token. Tell your AI:
 
-> "Associate the USDC token with my agent's wallet using POST http://localhost:8000/api/v1/hedera/wallets/{account_id}/associate-token."
+> "Associate the USDC token with my agent's wallet using POST http://localhost:8000/api/v1/hedera/wallets/{account_id}/associate-usdc."
 
 **Verification:** The response confirms token association.
 
@@ -61,14 +61,20 @@ Tell your AI:
 
 Now the core of x402 — your agent pays for a service. Tell your AI:
 
-> "Execute a USDC payment from my agent using POST http://localhost:8000/api/v1/hedera/payments/transfer. Transfer 1 USDC from my agent's account to account 0.0.22222 with memo 'workshop payment for data analysis'."
+> "Execute a USDC payment from my agent using POST http://localhost:8000/api/v1/hedera/payments. Transfer 1,000,000 USDC units (1 USDC) from my agent's account to account 0.0.22222. Set agent_id to my {agent_id}, task_id to 'workshop-task-1', and memo to 'workshop payment for data analysis'."
+
+**Required fields:** `agent_id`, `amount` (in USDC smallest units — 1 USDC = 1,000,000), `recipient`, `task_id`. Optional: `from_account`, `memo` (max 100 chars).
 
 **Expected response:**
 ```json
 {
+  "payment_id": "pay_abc123...",
   "transaction_id": "0.0.XXXXX@1234567890.000000001",
   "status": "SUCCESS",
+  "agent_id": "agent_abc123...",
   "amount": 1000000,
+  "recipient": "0.0.22222",
+  "task_id": "workshop-task-1",
   "mirror_node_url": "https://testnet.mirrornode.hedera.com/api/v1/transactions/..."
 }
 ```

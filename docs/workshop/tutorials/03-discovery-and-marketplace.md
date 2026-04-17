@@ -11,14 +11,17 @@
 
 The HCS-14 standard is how Hedera agents advertise themselves for discovery. Tell your AI:
 
-> "Register my agent in the HCS-14 directory using POST http://localhost:8000/api/v1/hedera/identity/directory/search — wait, first register using the directory registration endpoint. My agent_did is {agent_did}, capabilities are ['finance', 'compliance', 'payments'], role is 'analyst'."
+> "Register my agent in the HCS-14 directory using POST http://localhost:8000/api/v1/hedera/identity/directory/register. My agent_did is {agent_did}, capabilities are ['finance', 'compliance', 'payments'], role is 'analyst', and reputation_score is 0."
+
+**Required fields:** `agent_did`, `capabilities` (list of strings), `role`, `reputation_score` (>= 0).
 
 **Expected response:**
 ```json
 {
-  "status": "registered",
-  "directory_topic": "0.0.XXXXX",
-  "sequence_number": 1
+  "status": "SUCCESS",
+  "transaction_id": "0.0.XXXXX@...",
+  "did": "did:hedera:testnet:...",
+  "directory_topic": "0.0.XXXXX"
 }
 ```
 
@@ -90,7 +93,7 @@ Tell your AI:
 
 Tell your AI:
 
-> "Publish my agent to the marketplace using POST http://localhost:8000/api/v1/marketplace/publish. Use agent_id {agent_id}, category 'finance', description 'Autonomous fintech analyst specializing in market evaluation and compliance verification on Hedera', and pricing 'pay-per-task'."
+> "Publish my agent to the marketplace using POST http://localhost:8000/api/v1/marketplace/agents. Use agent_id {agent_id}, category 'finance', description 'Autonomous fintech analyst specializing in market evaluation and compliance verification on Hedera', and pricing 'pay-per-task'."
 
 **Expected response:**
 ```json

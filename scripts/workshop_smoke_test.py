@@ -115,6 +115,9 @@ def main():
         ("Billing", "app.services.billing_service"),
         ("Memory decay", "app.services.memory_decay_worker"),
         ("Plugin registry", "app.services.plugin_registry_service"),
+        ("Cognitive memory", "app.services.cognitive_memory_service"),
+        ("HCS-14 directory", "app.services.hcs14_directory_service"),
+        ("Workshop prefix middleware", "app.middleware.workshop_prefix"),
     ]
     for name, module in core_services:
         results.append(check(name, lambda m=module: check_import(m)))
@@ -130,6 +133,7 @@ def main():
         ("Marketplace schemas", "app.schemas.marketplace"),
         ("Plugin schemas", "app.schemas.plugins"),
         ("Billing schemas", "app.schemas.billing"),
+        ("Cognitive memory schemas", "app.schemas.cognitive_memory"),
     ]
     for name, module in schemas:
         results.append(check(name, lambda m=module: check_import(m)))

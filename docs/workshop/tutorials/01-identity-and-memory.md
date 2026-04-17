@@ -9,20 +9,27 @@
 
 Tell your AI:
 
-> "Send a POST request to http://localhost:8000/api/v1/agents to create a new agent. Use these details: name is 'my-consensus-agent', role is 'analyst', and description is 'My first autonomous fintech agent on Hedera'."
+> "Send a POST request to http://localhost:8000/api/v1/agents to create a new agent. Use these details: did is 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK' (a placeholder — Step 4 will replace it with a real did:hedera), name is 'my-consensus-agent', role is 'analyst', scope is 'PROJECT', and description is 'My first autonomous fintech agent on Hedera'."
+
+**Required fields:** `did` (must be `did:key:z6Mk...` format), `name`, `role`, `scope` (`SYSTEM`/`PROJECT`/`RUN`). Optional: `description`.
 
 **Expected response:**
 ```json
 {
+  "id": "agent_abc123...",
   "agent_id": "agent_abc123...",
+  "did": "did:key:z6Mk...",
   "name": "my-consensus-agent",
   "role": "analyst",
-  "did": "did:ethr:0x...",
-  "status": "active"
+  "scope": "PROJECT",
+  "description": "My first autonomous fintech agent on Hedera",
+  "project_id": "proj_workshop",
+  "created_at": "2026-04-17T...",
+  "updated_at": "2026-04-17T..."
 }
 ```
 
-**Save your `agent_id`** — you'll need it for every step after this.
+**Save your `agent_id`** — you'll need it for every step after this. The `did` field on the agent is the DID you'll later replace with a Hedera-native one in Step 4.
 
 **Verification:** `curl http://localhost:8000/api/v1/agents` shows your agent in the list.
 
