@@ -202,6 +202,9 @@ app.add_middleware(
         # B2 (#302, subsumes #295): HCS-10 (OpenConvAI) router lives at
         # `/hcs10/*` without a project prefix.
         "hcs10/": "/hcs10/",
+        # B3 (#303): marketplace router is mounted at `/marketplace/*`
+        # without a project prefix.
+        "marketplace/": "/marketplace/",
     },
 )
 
