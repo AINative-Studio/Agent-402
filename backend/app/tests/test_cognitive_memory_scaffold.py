@@ -47,22 +47,12 @@ def _build_app(workshop_mode: bool = False) -> FastAPI:
 
 
 class DescribeCognitiveMemoryStubs:
-    """Stubs for endpoints not yet implemented (S3, S4)."""
+    """Stubs for endpoints not yet implemented (S4)."""
 
     # /remember is implemented in S1 (#309); see test_cognitive_remember.py
     # /recall   is implemented in S2 (#310); see test_cognitive_recall.py
+    # /reflect  is implemented in S3 (#311); see test_cognitive_reflect.py
     # Remaining stubs below.
-
-    def it_reflect_returns_501(self):
-        app = _build_app()
-        client = TestClient(app)
-
-        response = client.post(
-            f"/v1/public/{DEFAULT_PID}/memory/reflect",
-            json={"agent_id": "agent_abc"},
-        )
-
-        assert response.status_code == 501
 
     def it_profile_returns_501(self):
         app = _build_app()
@@ -146,15 +136,8 @@ class DescribeWorkshopAliasRouting:
 
     # /api/v1/memory/remember routing covered by test_cognitive_remember.py
     # /api/v1/memory/recall   routing covered by test_cognitive_recall.py
+    # /api/v1/memory/reflect  routing covered by test_cognitive_reflect.py
     # Remaining stubs below.
-
-    def it_routes_api_v1_memory_reflect_to_stub(self):
-        app = _build_app(workshop_mode=True)
-        client = TestClient(app)
-
-        response = client.post("/api/v1/memory/reflect", json={})
-
-        assert response.status_code == 501
 
     def it_routes_api_v1_memory_profile_to_stub(self):
         app = _build_app(workshop_mode=True)
@@ -234,12 +217,15 @@ class DescribeCognitiveMemoryService:
 
         assert score == pytest.approx(0.8 * 0.5 + 0.6 * 0.5 + 0.9 * 0.0)
 
-    def it_synthesize_insights_returns_empty_buckets(self):
+    def it_synthesize_insights_returns_keyed_dict(self):
+        """S3 (#311) replaced the empty-buckets stub with a real heuristic."""
         svc = CognitiveMemoryService()
 
         insights = svc.synthesize_insights([])
 
-        assert insights == {"patterns": [], "contradictions": [], "gaps": []}
+        assert set(insights.keys()) == {"patterns", "contradictions", "gaps"}
+        assert insights["patterns"] == []
+        assert insights["contradictions"] == []
 
     def it_build_profile_with_empty_memories(self):
         svc = CognitiveMemoryService()

@@ -199,23 +199,133 @@ class CognitiveMemoryService:
         )
 
     # ------------------------------------------------------------------
-    # Insight synthesis (real logic lands in S3)
+    # Insight synthesis (Refs #311 S3)
     # ------------------------------------------------------------------
+
+    # Categories we expect to see in any long-running agent's corpus;
+    # missing ones become `gaps`.
+    _EXPECTED_GAP_CATEGORIES = [
+        MemoryCategory.DECISION,
+        MemoryCategory.PLAN,
+        MemoryCategory.OBSERVATION,
+    ]
+
+    _APPROVE_TOKENS = ("approve", "approved", "accept", "ok'd", "yes")
+    _REJECT_TOKENS = ("reject", "rejected", "deny", "denied", "blocked")
+
+    # Tokens too generic to count as "shared topic" signal.
+    _STOPWORDS = frozenset({
+        "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at",
+        "for", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+        "being", "this", "that", "these", "those", "it", "its", "as", "if",
+        "then", "than", "so", "such", "not", "no", "yes", "do", "does", "did",
+        "have", "has", "had", "will", "would", "should", "could", "can", "may",
+        "might", "must", "up", "down", "out", "over", "under", "again", "also",
+    })
+
+    def _significant_tokens(self, text: str) -> set:
+        """Lowercased, non-stopword word set for naive topic comparison."""
+        tokens = set()
+        for raw in text.lower().split():
+            cleaned = "".join(ch for ch in raw if ch.isalnum())
+            if len(cleaned) < 3:
+                continue
+            if cleaned in self._STOPWORDS:
+                continue
+            tokens.add(cleaned)
+        return tokens
+
+    def _extract_category(self, memory: Dict[str, Any]) -> MemoryCategory:
+        """Pull the stored category from metadata; fall back to OTHER."""
+        metadata = memory.get("metadata", {}) or {}
+        raw = metadata.get("category")
+        if isinstance(raw, MemoryCategory):
+            return raw
+        try:
+            return MemoryCategory(raw)
+        except (ValueError, TypeError):
+            return MemoryCategory.OTHER
 
     def synthesize_insights(
         self,
         memories: List[Dict[str, Any]],
     ) -> Dict[str, List[Any]]:
         """
-        Return empty insights. Replaced in S3 (#311).
+        Deterministic heuristic synthesis.
 
-        Returns a dict with `patterns`, `contradictions`, `gaps` keys so the
-        endpoint layer has a consistent interface from S0 onward.
+        - `patterns`: top-3 most common categories across `memories`, sorted
+          by count desc. Label is the category's enum value.
+        - `contradictions`: pairs of memories where one contains an
+          approve-token and the other a reject-token AND they share at
+          least 2 significant (non-stopword) tokens — taken as a naive
+          "same topic" proxy.
+        - `gaps`: expected categories (`decision`, `plan`, `observation`)
+          absent from the corpus.
         """
+        # --- Patterns -------------------------------------------------
+        counts: Dict[MemoryCategory, int] = {}
+        for m in memories:
+            cat = self._extract_category(m)
+            counts[cat] = counts.get(cat, 0) + 1
+
+        patterns: List[InsightPattern] = [
+            InsightPattern(label=cat.value, count=n, category=cat)
+            for cat, n in sorted(
+                counts.items(), key=lambda kv: (-kv[1], kv[0].value)
+            )
+        ][:3]
+
+        # --- Contradictions ------------------------------------------
+        approves = []
+        rejects = []
+        for m in memories:
+            content_lower = (m.get("content") or "").lower()
+            if any(tok in content_lower for tok in self._APPROVE_TOKENS):
+                approves.append(m)
+            if any(tok in content_lower for tok in self._REJECT_TOKENS):
+                rejects.append(m)
+
+        contradictions: List[InsightContradiction] = []
+        seen_pairs = set()
+        for a in approves:
+            a_tokens = self._significant_tokens(a.get("content") or "")
+            for r in rejects:
+                if a.get("memory_id") == r.get("memory_id"):
+                    continue
+                r_tokens = self._significant_tokens(r.get("content") or "")
+                overlap = a_tokens & r_tokens
+                if len(overlap) < 2:
+                    continue
+                pair_key = frozenset({a.get("memory_id"), r.get("memory_id")})
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                topic = " ".join(sorted(overlap)[:3])
+                contradictions.append(
+                    InsightContradiction(
+                        topic=topic,
+                        memory_ids=[a.get("memory_id", ""), r.get("memory_id", "")],
+                    )
+                )
+
+        # --- Gaps -----------------------------------------------------
+        present = {c for c, n in counts.items() if n > 0}
+        gaps: List[InsightGap] = []
+        for cat in self._EXPECTED_GAP_CATEGORIES:
+            if cat not in present:
+                gaps.append(
+                    InsightGap(
+                        category=cat,
+                        description=(
+                            f"No memories of category '{cat.value}' in the corpus"
+                        ),
+                    )
+                )
+
         return {
-            "patterns": [],  # type: List[InsightPattern]
-            "contradictions": [],  # type: List[InsightContradiction]
-            "gaps": [],  # type: List[InsightGap]
+            "patterns": patterns,
+            "contradictions": contradictions,
+            "gaps": gaps,
         }
 
     # ------------------------------------------------------------------
