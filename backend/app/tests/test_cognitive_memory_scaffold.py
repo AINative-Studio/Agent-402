@@ -47,19 +47,10 @@ def _build_app(workshop_mode: bool = False) -> FastAPI:
 
 
 class DescribeCognitiveMemoryStubs:
-    """All four endpoints return 501 until S1–S4 replace them."""
+    """Stubs for endpoints not yet implemented (S2-S4)."""
 
-    def it_remember_returns_501(self):
-        app = _build_app()
-        client = TestClient(app)
-
-        response = client.post(
-            f"/v1/public/{DEFAULT_PID}/memory/remember",
-            json={"agent_id": "agent_abc", "content": "hi"},
-        )
-
-        assert response.status_code == 501
-        assert "NOT_IMPLEMENTED" in response.text
+    # /remember is implemented in S1 (#309); see test_cognitive_remember.py
+    # for its coverage. Remaining stubs below.
 
     def it_recall_returns_501(self):
         app = _build_app()
@@ -173,16 +164,8 @@ class DescribeCognitiveMemorySchemaValidation:
 class DescribeWorkshopAliasRouting:
     """/api/v1/memory/* must resolve via convention mapping."""
 
-    def it_routes_api_v1_memory_remember_to_stub(self):
-        app = _build_app(workshop_mode=True)
-        client = TestClient(app)
-
-        response = client.post(
-            "/api/v1/memory/remember",
-            json={"agent_id": "agent_abc", "content": "hello"},
-        )
-
-        assert response.status_code == 501
+    # /api/v1/memory/remember routing is covered in test_cognitive_remember.py
+    # against the real (non-stub) handler. Remaining stubs below.
 
     def it_routes_api_v1_memory_recall_to_stub(self):
         app = _build_app(workshop_mode=True)
@@ -229,8 +212,9 @@ class DescribeCognitiveMemoryService:
             CognitiveMemoryType.SEMANTIC, "facts about rate limit", metadata={}
         )
 
+        # S1 (#309) replaced the 0.5 stub with a real heuristic; the value
+        # now varies by type/length/metadata. Still bounded to [0,1].
         assert 0.0 <= score <= 1.0
-        assert score == 0.5
 
     def it_score_importance_respects_hint_clipped_to_range(self):
         svc = CognitiveMemoryService()
@@ -245,10 +229,12 @@ class DescribeCognitiveMemoryService:
             CognitiveMemoryType.WORKING, "x", importance_hint=1.5
         ) == 1.0
 
-    def it_categorize_returns_other(self):
+    def it_categorize_returns_valid_category(self):
         svc = CognitiveMemoryService()
 
-        assert svc.categorize("anything", CognitiveMemoryType.WORKING) == MemoryCategory.OTHER
+        # S1 (#309) replaced the always-OTHER stub with a keyword heuristic;
+        # for non-matching text in WORKING type we still fall through to OTHER.
+        assert svc.categorize("asdfghjkl", CognitiveMemoryType.WORKING) == MemoryCategory.OTHER
 
     def it_compute_recency_weight_returns_default(self):
         svc = CognitiveMemoryService()

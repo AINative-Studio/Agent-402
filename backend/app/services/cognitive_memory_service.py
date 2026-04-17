@@ -41,8 +41,22 @@ class CognitiveMemoryService:
     DEFAULT_RECENCY_WEIGHT = 1.0
 
     # ------------------------------------------------------------------
-    # Importance scoring (real logic lands in S1)
+    # Importance scoring (Refs #309 S1)
     # ------------------------------------------------------------------
+
+    # Base importance by memory_type: procedural and semantic "stick" longer
+    # than working/episodic, so they earn a higher baseline. Working memory
+    # is short-term and therefore gets the lowest base score.
+    _BASE_BY_TYPE: Dict[CognitiveMemoryType, float] = {
+        CognitiveMemoryType.WORKING: 0.3,
+        CognitiveMemoryType.EPISODIC: 0.5,
+        CognitiveMemoryType.SEMANTIC: 0.55,
+        CognitiveMemoryType.PROCEDURAL: 0.7,
+    }
+
+    _CRITICAL_FLAGS = {
+        "critical", "urgent", "high", "p0", "p1", "important", "priority",
+    }
 
     def score_importance(
         self,
@@ -51,21 +65,80 @@ class CognitiveMemoryService:
         metadata: Optional[Dict[str, Any]] = None,
         importance_hint: Optional[float] = None,
     ) -> float:
-        """Return a deterministic 0.5 placeholder. Replaced in S1 (#309)."""
+        """
+        Deterministic 0.0–1.0 importance score.
+
+        importance = base(type) + length_bonus + metadata_boost, clipped.
+
+        - base: 0.3 (working) / 0.5 (episodic) / 0.55 (semantic) / 0.7 (procedural)
+        - length_bonus: min(len(content) / 2500, 0.2)
+        - metadata_boost: +0.2 when a metadata key or value matches a
+          critical flag (case-insensitive) — e.g. `{"urgent": True}` or
+          `{"priority": "critical"}`.
+
+        A caller-supplied `importance_hint` (any float) overrides the
+        heuristic and is clipped to [0.0, 1.0].
+        """
         if importance_hint is not None:
-            return max(0.0, min(1.0, importance_hint))
-        return self.DEFAULT_IMPORTANCE
+            return max(0.0, min(1.0, float(importance_hint)))
+
+        base = self._BASE_BY_TYPE.get(memory_type, self.DEFAULT_IMPORTANCE)
+        length_bonus = min(len(content) / 2500.0, 0.2)
+
+        metadata_boost = 0.0
+        for key, value in (metadata or {}).items():
+            if isinstance(value, bool) and value and key.lower() in self._CRITICAL_FLAGS:
+                metadata_boost = 0.2
+                break
+            if isinstance(value, str) and value.strip().lower() in self._CRITICAL_FLAGS:
+                metadata_boost = 0.2
+                break
+
+        return max(0.0, min(1.0, base + length_bonus + metadata_boost))
 
     # ------------------------------------------------------------------
-    # Auto-categorization (real logic lands in S1)
+    # Auto-categorization (Refs #309 S1)
     # ------------------------------------------------------------------
+
+    # Ordered keyword lists; first match wins. ERROR comes before DECISION
+    # so "error while approving" classifies as ERROR. Trailing spaces on
+    # short keywords avoid substring false-positives (e.g. "will " in "willing").
+    _CATEGORY_KEYWORDS: List[Any] = [
+        (MemoryCategory.ERROR, [
+            "error", "exception", "fail", "failed", "failure", "broken", "crash",
+        ]),
+        (MemoryCategory.DECISION, [
+            "decid", "approve", "approved", "reject", "rejected", "chose",
+        ]),
+        (MemoryCategory.PLAN, [
+            "plan", "schedule", "roadmap", "will ", "going to", "upcoming",
+        ]),
+        (MemoryCategory.OBSERVATION, [
+            "observ", "notic", "saw ", "metric", "spike", "dropped", "measured",
+        ]),
+        (MemoryCategory.INTERACTION, [
+            "asked", "replied", "said", "chat", "told", "responded",
+        ]),
+    ]
 
     def categorize(
         self,
         content: str,
         memory_type: CognitiveMemoryType,
     ) -> MemoryCategory:
-        """Return MemoryCategory.OTHER placeholder. Replaced in S1 (#309)."""
+        """
+        Keyword-based deterministic classification.
+
+        Ordering: ERROR > DECISION > PLAN > OBSERVATION > INTERACTION.
+        Semantic memories without keyword matches are tagged KNOWLEDGE; all
+        other non-matching memories fall through to OTHER.
+        """
+        text = content.lower()
+        for category, keywords in self._CATEGORY_KEYWORDS:
+            if any(kw in text for kw in keywords):
+                return category
+        if memory_type == CognitiveMemoryType.SEMANTIC:
+            return MemoryCategory.KNOWLEDGE
         return MemoryCategory.OTHER
 
     # ------------------------------------------------------------------
