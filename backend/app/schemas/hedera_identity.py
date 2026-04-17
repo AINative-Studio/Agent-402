@@ -241,6 +241,22 @@ class DirectorySearchRequest(BaseModel):
     min_reputation: Optional[int] = None
 
 
+class DirectoryRegisterRequest(BaseModel):
+    """Request body for POST /api/v1/hedera/identity/directory/register (Refs #291)."""
+    agent_did: str = Field(..., min_length=1, description="Agent DID (did:hedera:...)")
+    capabilities: List[str] = Field(default_factory=list, description="AAP capability strings")
+    role: str = Field(..., min_length=1, description="Agent role (analyst, compliance, ...)")
+    reputation_score: int = Field(default=0, ge=0, description="Initial reputation score, must be >= 0")
+
+
+class DirectoryRegisterResponse(BaseModel):
+    """Response from POST /api/v1/hedera/identity/directory/register."""
+    status: str
+    transaction_id: Optional[str] = None
+    did: str
+    directory_topic: str
+
+
 class CapabilitiesUpdateRequest(BaseModel):
     """Request body for PUT /api/v1/hedera/identity/{agent_id}/capabilities."""
     token_id: str
