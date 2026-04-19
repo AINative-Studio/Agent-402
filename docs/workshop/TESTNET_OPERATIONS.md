@@ -49,29 +49,32 @@ If short, fund via the Hedera testnet faucets:
 Run through Tutorial 2 steps against testnet as an operator:
 
 ```bash
+# Set your ZeroDB project ID (from .env ZERODB_PROJECT_ID, e.g. proj_workshop)
+PROJECT_ID=proj_workshop
+
 # 1. Create wallet
 curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   -d '{"agent_id":"probe-agent"}' \
-  http://localhost:8000/api/v1/hedera/wallets
+  "http://localhost:8000/v1/public/$PROJECT_ID/hedera/wallets"
 # => save account_id
 
-# 2. Associate USDC
+# 2. Associate USDC (no request body)
 curl -X POST -H "X-API-Key: $API_KEY" \
-  http://localhost:8000/api/v1/hedera/wallets/{account_id}/associate-usdc
+  "http://localhost:8000/v1/public/$PROJECT_ID/hedera/wallets/{account_id}/associate-usdc"
 
 # 3. Check balance (0 USDC expected)
 curl -H "X-API-Key: $API_KEY" \
-  http://localhost:8000/api/v1/hedera/wallets/{account_id}/balance
+  "http://localhost:8000/v1/public/$PROJECT_ID/hedera/wallets/{account_id}/balance"
 
 # 4. Execute USDC payment
 curl -X POST -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   -d '{"agent_id":"probe-agent","amount":1000000,"recipient":"0.0.22222","task_id":"probe-task-1","memo":"testnet probe"}' \
-  http://localhost:8000/api/v1/hedera/payments
+  "http://localhost:8000/v1/public/$PROJECT_ID/hedera/payments"
 # => save transaction_id
 
 # 5. Verify receipt
 curl -H "X-API-Key: $API_KEY" \
-  http://localhost:8000/api/v1/hedera/payments/{transaction_id}/verify
+  "http://localhost:8000/v1/public/$PROJECT_ID/hedera/payments/{transaction_id}/verify"
 # => verified: true, consensus_timestamp non-empty
 
 # 6. Open mirror_node_url from response in a browser — expect a 200 JSON payload

@@ -1,19 +1,30 @@
 # Tutorial 2: Payments & Trust
 
-**Time:** ~50 minutes
+**Time:** ~50 minutes  
 **Goal:** Execute USDC payments on Hedera and build an on-chain reputation
 
-**Prerequisite:** Completed Tutorial 1 (you have an agent_id and agent_did)
+**Prerequisite:** Completed Tutorial 1 — you have an `agent_id` (e.g. `agent_abc123...`) and an `agent_did` (e.g. `did:hedera:testnet:0.0.XXXXX_0.0.YYYYY`).
+
+> **Before you start:** Every URL containing `{project_id}` requires your `ZERODB_PROJECT_ID` from `.env`
+> (e.g. `proj_workshop`). See the [Vibe Coder Guide](../VIBE_CODER_GUIDE.md) if you haven't set this up.
+> New to Hedera terms? See the [Glossary](../GLOSSARY.md).
 
 ---
 
-## Step 1: Create an Agent Wallet
+## Step 1: Create an Agent Wallet *(~5 min)*
 
 Tell your AI:
 
-> "Create a Hedera wallet for my agent using POST http://localhost:8000/api/v1/hedera/wallets. My agent_id is {agent_id}."
+> "Create a Hedera wallet for my agent using `POST http://localhost:8000/v1/public/{project_id}/hedera/wallets`. My `agent_id` is `{agent_id}`."
 
-**Expected response:**
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}"
+}
+```
+
+✅ **You should see:**
 ```json
 {
   "account_id": "0.0.XXXXX",
@@ -22,31 +33,40 @@ Tell your AI:
 }
 ```
 
-**Save your `account_id`.**
+📌 **Save your `account_id`** (the `0.0.XXXXX` format).
 
 **What this means:** Your agent now has its own Hedera account. It can hold HBAR and USDC independently of your operator account.
 
 ---
 
-## Step 2: Associate USDC Token
+## Step 2: Associate USDC Token *(~4 min)*
 
 Before your agent can receive USDC, its account must be associated with the USDC token. Tell your AI:
 
-> "Associate the USDC token with my agent's wallet using POST http://localhost:8000/api/v1/hedera/wallets/{account_id}/associate-usdc."
+> "Associate the USDC token with my agent's wallet using `POST http://localhost:8000/v1/public/{project_id}/hedera/wallets/{account_id}/associate-usdc` — replace `{account_id}` with my wallet account ID from Step 1. This endpoint takes no request body."
 
-**Verification:** The response confirms token association.
+> 💡 **No body needed** — this endpoint takes no JSON payload. Just the POST with your API key is enough.
+
+✅ **You should see:**
+```json
+{
+  "account_id": "0.0.XXXXX",
+  "token_id": "0.0.YYYYY",
+  "status": "associated"
+}
+```
 
 **Why this step exists:** On Hedera, accounts must explicitly opt-in to receive specific tokens. This is a security feature — no one can send you tokens you didn't agree to hold.
 
 ---
 
-## Step 3: Check Balance
+## Step 3: Check Balance *(~2 min)*
 
 Tell your AI:
 
-> "Check my agent's balance using GET http://localhost:8000/api/v1/hedera/wallets/{account_id}/balance."
+> "Check my agent's balance using `GET http://localhost:8000/v1/public/{project_id}/hedera/wallets/{account_id}/balance`."
 
-**Expected response:**
+✅ **You should see:**
 ```json
 {
   "account_id": "0.0.XXXXX",
@@ -57,15 +77,27 @@ Tell your AI:
 
 ---
 
-## Step 4: Execute a USDC Payment
+## Step 4: Execute a USDC Payment *(~7 min)*
 
 Now the core of x402 — your agent pays for a service. Tell your AI:
 
-> "Execute a USDC payment from my agent using POST http://localhost:8000/api/v1/hedera/payments. Transfer 1,000,000 USDC units (1 USDC) from my agent's account to account 0.0.22222. Set agent_id to my {agent_id}, task_id to 'workshop-task-1', and memo to 'workshop payment for data analysis'."
+> "Execute a USDC payment from my agent using `POST http://localhost:8000/v1/public/{project_id}/hedera/payments`. Transfer 1,000,000 USDC units (= 1 USDC) from my agent's account to account `0.0.22222`. Set `agent_id` to my `{agent_id}`, `task_id` to `workshop-task-1`, and `memo` to `workshop payment for data analysis`."
 
-**Required fields:** `agent_id`, `amount` (in USDC smallest units — 1 USDC = 1,000,000), `recipient`, `task_id`. Optional: `from_account`, `memo` (max 100 chars).
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}",
+  "amount": 1000000,
+  "recipient": "0.0.22222",
+  "task_id": "workshop-task-1",
+  "memo": "workshop payment for data analysis"
+}
+```
 
-**Expected response:**
+**Required fields:** `agent_id`, `amount` (in USDC smallest units — 1 USDC = 1,000,000), `recipient`, `task_id`.  
+**Optional:** `from_account` (defaults to the agent's wallet), `memo` (max 100 chars).
+
+✅ **You should see:**
 ```json
 {
   "payment_id": "pay_abc123...",
@@ -79,17 +111,17 @@ Now the core of x402 — your agent pays for a service. Tell your AI:
 }
 ```
 
-**Save your `transaction_id`.**
+📌 **Save your `transaction_id`** — you'll need it as `payment_proof_tx` in Step 7 when you submit reputation feedback.
 
 ---
 
-## Step 5: Verify the Payment Receipt
+## Step 5: Verify the Payment Receipt *(~3 min)*
 
 Tell your AI:
 
-> "Verify my payment receipt using GET http://localhost:8000/api/v1/hedera/payments/{transaction_id}/verify."
+> "Verify my payment receipt using `GET http://localhost:8000/v1/public/{project_id}/hedera/payments/{transaction_id}/verify` — replace `{transaction_id}` with the transaction ID from Step 4."
 
-**Expected response:**
+✅ **You should see:**
 ```json
 {
   "verified": true,
@@ -99,31 +131,48 @@ Tell your AI:
 }
 ```
 
-**Verification:** Open the `mirror_node_url` in your browser. You'll see the actual Hedera transaction.
+**Verification:** Open the `mirror_node_url` in your browser. You'll see the actual Hedera transaction record.
 
 **What this means:** The payment is settled in under 3 seconds, verified by Hedera consensus, and independently auditable on the public ledger. No intermediary. No trust required.
 
 ---
 
-## Step 6: Explore the x402 Discovery Endpoint
+## Step 6: Explore the x402 Discovery Endpoint *(~3 min)*
 
 Tell your AI:
 
-> "GET http://localhost:8000/.well-known/x402 — what does this tell us?"
+> "`GET http://localhost:8000/.well-known/x402` — what does this tell us?"
 
-**Expected response:** The x402 protocol metadata including Hedera network, USDC token ID, supported DIDs, and signature methods.
+> 💡 **This is a GET with no body.** The `/.well-known/x402` path is a standard protocol endpoint — no `{project_id}` prefix needed.
+
+✅ **You should see:** The x402 protocol metadata including Hedera network, USDC token ID, supported DIDs, and signature methods.
 
 **What this means:** Any agent in the world can discover this server's payment capabilities by hitting this standard endpoint. It's how agents find and pay each other.
 
 ---
 
-## Step 7: Submit Reputation Feedback
+## Step 7: Submit Reputation Feedback *(~5 min)*
 
 Now let's build trust. You'll submit feedback for another agent (or your own for testing). Tell your AI:
 
-> "Submit reputation feedback using POST http://localhost:8000/api/v1/hedera/reputation/{agent_did}/feedback. Rate the agent 5 stars, comment 'Excellent analysis, fast settlement', with payment_proof_tx set to my transaction_id from Step 4, task_id 'workshop-task-1', and submitter_did set to my own agent_did."
+> "Submit reputation feedback using `POST http://localhost:8000/api/v1/hedera/reputation/{agent_did}/feedback`. Rate the agent 5 stars, comment `'Excellent analysis, fast settlement'`, with `payment_proof_tx` set to my `transaction_id` from Step 4, `task_id` `'workshop-task-1'`, and `submitter_did` set to my own `agent_did`."
 
-**Expected response:**
+> 💡 **Use the `agent_did` from Tutorial 1 Step 4** (the `did:hedera:...` format) in the URL path here, not the short `agent_id`.
+
+**Request body example:**
+```json
+{
+  "rating": 5,
+  "comment": "Excellent analysis, fast settlement",
+  "payment_proof_tx": "{transaction_id from Step 4}",
+  "task_id": "workshop-task-1",
+  "submitter_did": "{your agent_did}"
+}
+```
+
+**`rating` range:** 1–5 (integer).
+
+✅ **You should see:**
 ```json
 {
   "sequence_number": 1,
@@ -136,21 +185,21 @@ Now let's build trust. You'll submit feedback for another agent (or your own for
 
 ---
 
-## Step 8: Submit More Feedback (Different Ratings)
+## Step 8: Submit More Feedback (Different Ratings) *(~3 min)*
 
 Tell your AI:
 
-> "Submit two more feedback entries for the same agent: one with rating 4 and comment 'Good but slightly slow', and one with rating 5 and comment 'Perfect execution'. Use different task_ids."
+> "Submit two more feedback entries for the same agent `{agent_did}`: one with `rating` 4 and `comment` `'Good but slightly slow'`, and one with `rating` 5 and `comment` `'Perfect execution'`. Use different `task_id`s (e.g. `workshop-task-2` and `workshop-task-3`)."
 
 ---
 
-## Step 9: Check Reputation Score
+## Step 9: Check Reputation Score *(~3 min)*
 
 Tell your AI:
 
-> "Get the reputation score for agent {agent_did} using GET http://localhost:8000/api/v1/hedera/reputation/{agent_did}."
+> "Get the reputation score for agent `{agent_did}` using `GET http://localhost:8000/api/v1/hedera/reputation/{agent_did}`."
 
-**Expected response:**
+✅ **You should see:**
 ```json
 {
   "agent_did": "did:hedera:testnet:...",
@@ -163,29 +212,34 @@ Tell your AI:
 ```
 
 **What this means:** The score uses exponential recency decay — recent feedback matters more. Trust tiers progress as the agent builds history:
-- **0 (NEW):** < 3 reviews
-- **1 (BASIC):** score < 2.0 or < 10 reviews
-- **2 (TRUSTED):** score >= 2.0 and >= 10 reviews
-- **3 (VERIFIED):** score >= 3.5 and >= 25 reviews
-- **4 (ESTABLISHED):** score >= 4.0 and >= 50 reviews
+
+| Tier | Name | Criteria |
+|------|------|----------|
+| 0 | NEW | < 3 reviews |
+| 1 | BASIC | score < 2.0 or < 10 reviews |
+| 2 | TRUSTED | score ≥ 2.0 and ≥ 10 reviews |
+| 3 | VERIFIED | score ≥ 3.5 and ≥ 25 reviews |
+| 4 | ESTABLISHED | score ≥ 4.0 and ≥ 50 reviews |
 
 ---
 
-## Step 10: View Feedback History
+## Step 10: View Feedback History *(~2 min)*
 
 Tell your AI:
 
-> "Get all feedback for agent {agent_did} using GET http://localhost:8000/api/v1/hedera/reputation/{agent_did}/feedback."
+> "Get all feedback for agent `{agent_did}` using `GET http://localhost:8000/api/v1/hedera/reputation/{agent_did}/feedback`."
 
-**Verification:** You see all 3 feedback entries with their consensus timestamps.
+✅ **You should see:** A list of all 3 feedback entries with their consensus timestamps, ratings, and comments.
 
 ---
 
-## Step 11: See Ranked Agents
+## Step 11: See Ranked Agents *(~2 min)*
 
 Tell your AI:
 
-> "Get all agents ranked by reputation using GET http://localhost:8000/api/v1/hedera/reputation/ranked."
+> "Get all agents ranked by reputation using `GET http://localhost:8000/api/v1/hedera/reputation/ranked`."
+
+✅ **You should see:** A ranked list of all agents with their scores and tier names.
 
 **What this means:** When your agent needs to delegate work, it can choose partners based on on-chain trust scores. No fake reviews possible — every rating requires a verified payment proof.
 
