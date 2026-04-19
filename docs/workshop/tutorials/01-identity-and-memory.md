@@ -1,19 +1,42 @@
 # Tutorial 1: Identity & Memory
 
-**Time:** ~50 minutes
+**Time:** ~50 minutes  
 **Goal:** Create an agent with a Hedera identity and persistent, tamper-proof memory
+
+> **Before you start:** Make sure your server is running and your `ZERODB_PROJECT_ID` is set.
+> Every URL in this tutorial contains `{project_id}` — replace it with the value of
+> `ZERODB_PROJECT_ID` from your `.env` file (e.g. `proj_workshop`).
+> See the [Vibe Coder Guide](../VIBE_CODER_GUIDE.md) for setup steps.
+> New to Hedera terms? See the [Glossary](../GLOSSARY.md).
 
 ---
 
-## Step 1: Create Your Agent
+## Step 1: Create Your Agent *(~5 min)*
 
 Tell your AI:
 
-> "Send a POST request to http://localhost:8000/api/v1/agents to create a new agent. Use these details: did is 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK' (a placeholder — Step 4 will replace it with a real did:hedera), name is 'my-consensus-agent', role is 'analyst', scope is 'PROJECT', and description is 'My first autonomous fintech agent on Hedera'."
+> "Send a POST request to `http://localhost:8000/v1/public/{project_id}/agents` to create a new agent. Use these details: did is `did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK` (a placeholder — Step 4 will replace it with a real did:hedera), name is `my-consensus-agent`, role is `analyst`, scope is `PROJECT`, and description is `My first autonomous fintech agent on Hedera`. Replace `{project_id}` with my ZeroDB project ID."
 
-**Required fields:** `did` (must be `did:key:z6Mk...` format), `name`, `role`, `scope` (`SYSTEM`/`PROJECT`/`RUN`). Optional: `description`.
+**Required fields:**
+- `did` — must be `did:key:z6Mk...` format (placeholder; replaced in Step 4)
+- `name` — human-readable agent name
+- `role` — valid values: `analyst` | `compliance` | `transaction` | `orchestrator`
+- `scope` — valid values: `SYSTEM` | `PROJECT` | `RUN` (use `PROJECT` for this workshop)
 
-**Expected response:**
+**Optional:** `description` (max 1000 chars)
+
+**Request body example:**
+```json
+{
+  "did": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+  "name": "my-consensus-agent",
+  "role": "analyst",
+  "scope": "PROJECT",
+  "description": "My first autonomous fintech agent on Hedera"
+}
+```
+
+✅ **You should see:**
 ```json
 {
   "id": "agent_abc123...",
@@ -29,39 +52,47 @@ Tell your AI:
 }
 ```
 
-**Save your `agent_id`** — you'll need it for every step after this. The `did` field on the agent is the DID you'll later replace with a Hedera-native one in Step 4.
+📌 **Save your `agent_id`** — you'll need it for every step after this.
 
-**Verification:** `curl http://localhost:8000/api/v1/agents` shows your agent in the list.
-
----
-
-## Step 2: Verify Your Agent Exists
-
-Tell your AI:
-
-> "GET my agent details from http://localhost:8000/api/v1/agents/{agent_id} — replace {agent_id} with the ID from Step 1."
-
-**Verification:** You see your agent's name, role, and DID.
+**Verification:** `curl http://localhost:8000/v1/public/{project_id}/agents` shows your agent in the list.
 
 ---
 
-## Step 3: Explore the Agent API
+## Step 2: Verify Your Agent Exists *(~2 min)*
 
 Tell your AI:
 
-> "Show me all the endpoints available at http://localhost:8000/docs that start with /api/v1/agents. What can I do with agents?"
+> "GET my agent details from `http://localhost:8000/v1/public/{project_id}/agents/{agent_id}` — replace `{project_id}` with my ZeroDB project ID and `{agent_id}` with the ID from Step 1."
+
+✅ **You should see:** Your agent's name, role, and DID in the response JSON.
+
+---
+
+## Step 3: Explore the Agent API *(~3 min)*
+
+Tell your AI:
+
+> "Show me all the endpoints available at `http://localhost:8000/docs` that have `/agents` in the path. What can I do with agents?"
 
 This teaches you the API surface. Your AI will explain: create, list, get, update, delete — standard CRUD plus Hedera-specific identity operations.
 
 ---
 
-## Step 4: Register Agent Identity on Hedera
+## Step 4: Register Agent Identity on Hedera *(~7 min)*
 
 Tell your AI:
 
-> "Register my agent on Hedera using POST http://localhost:8000/api/v1/hedera/identity/register. My agent_id is {agent_id}. Give it capabilities: finance, compliance, payments."
+> "Register my agent on Hedera using `POST http://localhost:8000/api/v1/hedera/identity/register`. My agent_id is `{agent_id}`. Give it capabilities: `finance`, `compliance`, `payments`."
 
-**Expected response:**
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}",
+  "capabilities": ["finance", "compliance", "payments"]
+}
+```
+
+✅ **You should see:**
 ```json
 {
   "token_id": "0.0.XXXXX",
@@ -71,43 +102,61 @@ Tell your AI:
 }
 ```
 
-**Save your `agent_did`** — this is your agent's decentralized identity.
+📌 **Save your `agent_did`** — this is your agent's decentralized identity. It starts with `did:hedera:testnet:`.
 
 **Verification:** Your agent now has an HTS NFT on Hedera testnet. This NFT IS your agent's identity — portable, verifiable, revocable.
 
 ---
 
-## Step 5: Resolve Your Agent's DID
+## Step 5: Resolve Your Agent's DID *(~3 min)*
 
 Tell your AI:
 
-> "Resolve my agent's DID using GET http://localhost:8000/api/v1/hedera/identity/{agent_id}/did"
+> "Resolve my agent's DID using `GET http://localhost:8000/api/v1/hedera/identity/{agent_id}/did` — replace `{agent_id}` with the short ID from Step 1 (the `agt_...` format, NOT the `did:hedera:...` from Step 4)."
 
-**Expected response:** A W3C DID Document with your agent's verification methods and service endpoints.
+> 💡 **Which ID to use here?** Use the `agent_id` from Step 1 (the short `agent_abc123...` form), not the `agent_did` from Step 4. The path parameter `{agent_id}` means the ZeroDB agent ID, not the Hedera DID.
+
+✅ **You should see:** A W3C DID Document with your agent's verification methods and service endpoints.
 
 **What this means:** Any system in the world can verify your agent's identity by resolving this DID. No central authority needed.
 
 ---
 
-## Step 6: Check Agent Capabilities
+## Step 6: Check Agent Capabilities *(~2 min)*
 
 Tell your AI:
 
-> "Get my agent's capabilities from GET http://localhost:8000/api/v1/hedera/identity/{agent_id}/capabilities"
+> "Get my agent's capabilities from `GET http://localhost:8000/api/v1/hedera/identity/{agent_id}/capabilities` — use my short `agent_id` from Step 1."
 
-**Expected response:** The capabilities you registered (finance, compliance, payments).
+✅ **You should see:** The three capabilities you registered: `finance`, `compliance`, `payments`.
 
 ---
 
-## Step 7: Store Your Agent's First Memory — Cognitive API
+## Step 7: Store Your Agent's First Memory — Cognitive API *(~7 min)*
 
 The cognitive API wraps raw storage with importance scoring, auto-categorization, and automatic HCS anchoring. One endpoint replaces the old CRUD + explicit-anchor dance.
 
 Tell your AI:
 
-> "Store a memory for my agent using POST http://localhost:8000/api/v1/memory/remember. The agent_id is {agent_id}, content is 'Evaluated market conditions: HBAR/USD stable at 0.08, low volatility. Recommendation: proceed with transaction.', and memory_type is 'episodic'."
+> "Store a memory for my agent using `POST http://localhost:8000/v1/public/{project_id}/memory/remember`. The `agent_id` is `{agent_id}`, `content` is `'Evaluated market conditions: HBAR/USD stable at 0.08, low volatility. Recommendation: proceed with transaction.'`, and `memory_type` is `episodic`."
 
-**Expected response:**
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}",
+  "content": "Evaluated market conditions: HBAR/USD stable at 0.08, low volatility. Recommendation: proceed with transaction.",
+  "memory_type": "episodic"
+}
+```
+
+**`memory_type` valid values:** `working` | `episodic` | `semantic` | `procedural`
+
+**Optional fields:**
+- `namespace` (default: `"default"`) — isolates memories by context
+- `importance_hint` (0.0–1.0) — nudge the importance scorer
+- `metadata` (object) — arbitrary key/value for your own use
+
+✅ **You should see:**
 ```json
 {
   "memory_id": "mem_abc123...",
@@ -122,22 +171,44 @@ Tell your AI:
 }
 ```
 
-**Save your `memory_id`.**
+📌 **Save your `memory_id`.**
 
 **What this means:**
-- `category` — the cognitive API classified your memory automatically (keywords like "evaluated" → `observation`).
-- `importance` — a 0.0–1.0 score derived from memory type, content length, and any priority flags in metadata. Higher = more likely to resurface in recall.
-- `hcs_anchor_pending: false` — the memory's SHA-256 content hash was anchored to the Hedera Consensus Service **as part of the same call**. No separate anchor step needed; if it were `true`, the anchor can be retried later (the memory itself is still durable).
+- `category` — auto-classified from your content (keywords like "evaluated" → `observation`). Valid category values: `decision` | `observation` | `knowledge` | `plan` | `interaction` | `error` | `other`.
+- `importance` — a 0.0–1.0 score derived from memory type, content length, and any priority flags in metadata. Higher = more likely to surface in recall.
+- `hcs_anchor_pending: false` — the memory's SHA-256 content hash was anchored to the Hedera Consensus Service **as part of the same call**. No separate anchor step needed.
 
 ---
 
-## Step 8: Recall with Relevance + Recency
+## Step 8: Recall with Relevance + Recency *(~7 min)*
 
 Tell your AI:
 
-> "Recall memories for my agent using POST http://localhost:8000/api/v1/memory/recall. Use the query 'market conditions' and agent_id {agent_id}."
+> "Recall memories for my agent using `POST http://localhost:8000/v1/public/{project_id}/memory/recall`. Use `agent_id` `{agent_id}` and `query` `'market conditions'`."
 
-**Expected response:**
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}",
+  "query": "market conditions"
+}
+```
+
+**Optional `weights` field** — override the default ranking balance:
+```json
+{
+  "agent_id": "{agent_id}",
+  "query": "market conditions",
+  "weights": {
+    "similarity": 0.6,
+    "recency": 0.3,
+    "importance": 0.1,
+    "half_life_days": 7.0
+  }
+}
+```
+
+✅ **You should see:**
 ```json
 {
   "memories": [
@@ -167,30 +238,39 @@ Tell your AI:
 **What this means:** Three signals combined into one ranking score:
 - **similarity_score** — how close the memory is to your query (vector embedding cosine).
 - **recency_weight** — exponential decay over age (`0.5 ** (age_days / 7)`). Recent memories surface first.
-- **composite_score** — the weighted sum. Pass custom `weights` in the request body to reshape ranking (e.g. boost importance).
+- **composite_score** — the weighted sum. Pass custom `weights` to reshape ranking (e.g. boost importance over recency).
 
 This is how agents "remember what matters" instead of drowning in every past observation.
 
 ---
 
-## Step 9: Store More Memories, Then Reflect
+## Step 9: Store More Memories, Then Reflect *(~10 min)*
 
 Tell your AI:
 
-> "Remember two more memories for my agent via POST http://localhost:8000/api/v1/memory/remember:
-> (1) content 'KYC verification passed for counterparty 0.0.99999. Risk score: LOW.', memory_type 'episodic'.
-> (2) content 'Approved 10 USDC transfer to 0.0.99999 based on positive market analysis.', memory_type 'episodic'."
+> "Remember two more memories for my agent via `POST http://localhost:8000/v1/public/{project_id}/memory/remember`:
+> 1. `content` = `'KYC verification passed for counterparty 0.0.99999. Risk score: LOW.'`, `memory_type` = `episodic`
+> 2. `content` = `'Approved 10 USDC transfer to 0.0.99999 based on positive market analysis.'`, `memory_type` = `episodic`"
 
-Now recall by different queries to confirm semantic search still works:
+Now verify semantic search works across these memories:
 
-> "Recall memories for 'compliance' — does it find the KYC memory?"
-> "Recall memories for 'transfer approved' — does it find the transaction decision?"
+> "Recall memories for `'compliance'` — does it find the KYC memory?"
+> "Recall memories for `'transfer approved'` — does it find the transaction decision?"
 
-Then try the synthesis endpoints:
+Then run the synthesis endpoints:
 
-> "Generate cognitive insights for my agent using POST http://localhost:8000/api/v1/memory/reflect with agent_id {agent_id}. Look at patterns and contradictions across my memories."
+> "Generate cognitive insights for my agent using `POST http://localhost:8000/v1/public/{project_id}/memory/reflect` with `agent_id` = `{agent_id}`."
 
-**Expected response:**
+**Request body example:**
+```json
+{
+  "agent_id": "{agent_id}"
+}
+```
+
+**Optional `window_days`** (default: 30) — how far back to look for patterns.
+
+✅ **You should see:**
 ```json
 {
   "agent_id": "agent_abc123...",
@@ -209,21 +289,40 @@ Then try the synthesis endpoints:
 
 Finally, check the agent's cognitive profile:
 
-> "Get the cognitive profile for my agent via GET http://localhost:8000/api/v1/memory/profile/{agent_id}."
+> "Get the cognitive profile for my agent via `GET http://localhost:8000/v1/public/{project_id}/memory/profile/{agent_id}`."
 
-**What this means:** `/reflect` gives you top patterns across a window, calls out contradictions (approve/reject on the same topic), and highlights gaps. `/profile/{agent_id}` surfaces the agent's topic distribution and expertise areas (`count × avg_importance`) — handy for routing work to the right agent.
+✅ **You should see:**
+```json
+{
+  "agent_id": "agent_abc123...",
+  "total_memories": 3,
+  "memory_type_distribution": {
+    "episodic": 3
+  },
+  "category_distribution": {
+    "observation": 1,
+    "decision": 2
+  },
+  "avg_importance": 0.58,
+  "expertise_topics": ["market conditions", "compliance", "payments"]
+}
+```
+
+**What this means:** `/reflect` identifies top patterns across a window, calls out contradictions (approve/reject on the same topic), and highlights gaps. `/profile/{agent_id}` surfaces the agent's topic distribution and expertise areas — handy for routing work to the right agent.
 
 ---
 
-## Step 10: Verify the HCS Anchor on the Public Ledger
+## Step 10: Verify the HCS Anchor on the Public Ledger *(~5 min)*
 
 `/memory/remember` anchors the memory's SHA-256 content hash to Hedera Consensus Service as part of the same call (`hcs_anchor_pending: false` in the response confirms it succeeded). Now verify the anchor is visible on the public ledger.
 
 Tell your AI:
 
-> "Fetch the HCS audit trail for memory {memory_id} via GET http://localhost:8000/api/v1/anchor/{memory_id}/verify. Return the HCS topic_id and sequence number."
+> "Fetch the HCS audit trail for memory `{memory_id}` via `GET http://localhost:8000/anchor/{memory_id}/verify`. Return the HCS `topic_id` and `sequence_number`."
 
-**Expected response:**
+> ⚠️ **Note:** The anchor endpoint does **not** have an `/api/v1/` or `/v1/public/` prefix — use the path exactly as shown: `GET http://localhost:8000/anchor/{memory_id}/verify`.
+
+✅ **You should see:**
 ```json
 {
   "memory_id": "mem_abc123...",
@@ -235,7 +334,7 @@ Tell your AI:
 }
 ```
 
-**Verification:** Open the `mirror_node_url` in your browser — you'll see the anchor record on the Hedera public ledger. If anyone modifies the stored memory, its SHA-256 will no longer match this anchor, which is how you prove tamper-evidence.
+**Verification:** Open the `mirror_node_url` in your browser — you'll see the anchor record on the Hedera public ledger. If anyone modifies the stored memory, its SHA-256 will no longer match this anchor, proving tamper-evidence.
 
 **What this means:** You didn't have to call an anchor endpoint yourself — the cognitive API did it automatically on write. Your agent's memory is **durable in ZeroDB and tamper-evident on Hedera** in a single operation. That's the full "remember with proof" flow regulated use cases require.
 
@@ -245,11 +344,11 @@ Tell your AI:
 
 You now have:
 - An AI agent with a unique identity
-- A Hedera-native DID (did:hedera) backed by an HTS NFT
+- A Hedera-native DID (`did:hedera`) backed by an HTS NFT
 - Persistent memories that survive across sessions
 - At least one memory anchored to Hedera for tamper-proof audit
 
-**What you built matters:** This isn't a toy. Regulated industries (finance, healthcare, legal) need exactly this: AI agents whose decisions are verifiable, auditable, and provably unmodified. You just built that foundation in under an hour, by talking to your AI assistant.
+**What you built matters:** Regulated industries (finance, healthcare, legal) need exactly this: AI agents whose decisions are verifiable, auditable, and provably unmodified. You just built that foundation in under an hour, by talking to your AI assistant.
 
 ---
 
