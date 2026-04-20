@@ -20,7 +20,9 @@ Built by AINative Dev Team
 Refs #187, #188
 """
 import os
+import json
 import logging
+import threading
 import uuid
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
@@ -95,6 +97,14 @@ class HederaClient:
 
         self._http_client: Optional[httpx.AsyncClient] = None
 
+        # Per-topic sequence counter and submission log for simulated HCS.
+        # In production the Hedera network assigns sequence numbers and the
+        # mirror node serves message history — this fallback only runs when
+        # we cannot reach a real TopicMessageSubmit / mirror node.
+        self._hcs_sequence_counts: Dict[str, int] = {}
+        self._hcs_topic_log: Dict[str, list] = {}
+        self._hcs_sequence_lock = threading.Lock()
+
     @property
     def http_client(self) -> httpx.AsyncClient:
         """Lazy-initialized HTTP client for mirror node queries."""
@@ -120,6 +130,22 @@ class HederaClient:
         suffix = int(uuid.uuid4().int % 9_000_000) + 1_000_000
         return f"0.0.{suffix}"
 
+    def _hedera_timestamp(self) -> str:
+        """Return current time as a Hedera consensus timestamp string.
+
+        Format: ``"{seconds}.{nanoseconds:09d}"`` (e.g. ``"1712000001.000000003"``).
+        """
+        now = datetime.now(timezone.utc)
+        seconds = int(now.timestamp())
+        nanos = now.microsecond * 1000
+        return f"{seconds}.{nanos:09d}"
+
+    def _next_topic_sequence(self, topic_id: str) -> int:
+        with self._hcs_sequence_lock:
+            n = self._hcs_sequence_counts.get(topic_id, 0) + 1
+            self._hcs_sequence_counts[topic_id] = n
+            return n
+
     def _generate_transaction_id(self, account_id: str = None) -> str:
         """
         Generate a Hedera transaction ID.
@@ -134,10 +160,7 @@ class HederaClient:
             Transaction ID string
         """
         acct = account_id or self.operator_id
-        now = datetime.now(timezone.utc)
-        seconds = int(now.timestamp())
-        nanos = now.microsecond * 1000
-        return f"{acct}@{seconds}.{nanos:09d}"
+        return f"{acct}@{self._hedera_timestamp()}"
 
     async def create_account(
         self,
@@ -434,6 +457,146 @@ class HederaClient:
             "consensus_timestamp": datetime.now(timezone.utc).isoformat(),
             "hash": f"0x{uuid.uuid4().hex}"
         }
+
+    async def submit_hcs_message(
+        self,
+        topic_id: str,
+        message: Any,
+    ) -> Dict[str, Any]:
+        """Submit a message to a Hedera Consensus Service topic.
+
+        In production, this would submit a TopicMessageSubmitTransaction:
+            from hedera import TopicMessageSubmitTransaction, TopicId
+            receipt = await (
+                TopicMessageSubmitTransaction()
+                .set_topic_id(TopicId.from_string(topic_id))
+                .set_message(message_str.encode("utf-8"))
+                .execute(client)
+                .get_receipt(client)
+            )
+
+        Without the SDK we simulate the receipt deterministically so
+        downstream services (reputation, DID, HCS-14, OpenConvAI) can
+        consume sequence_number and consensus_timestamp.
+
+        Args:
+            topic_id: HCS topic ID (e.g. "0.0.99999").
+            message: Message payload — dicts are JSON-encoded, other
+                values are coerced to ``str``.
+
+        Returns:
+            Dict with ``transaction_id``, ``status``, ``topic_id``,
+            ``sequence_number`` (int) and ``consensus_timestamp`` (str
+            in Hedera ``"{seconds}.{nanoseconds:09d}"`` format).
+        """
+        if isinstance(message, dict):
+            message_str = json.dumps(message)
+        else:
+            message_str = str(message)
+
+        logger.info(
+            f"Submitting HCS message to topic={topic_id}, "
+            f"size={len(message_str)} bytes"
+        )
+
+        transaction_id = self._generate_transaction_id()
+        consensus_timestamp = self._hedera_timestamp()
+        sequence_number = self._next_topic_sequence(topic_id)
+
+        with self._hcs_sequence_lock:
+            self._hcs_topic_log.setdefault(topic_id, []).append(
+                {
+                    "sequence_number": sequence_number,
+                    "consensus_timestamp": consensus_timestamp,
+                    "message": message_str,
+                }
+            )
+
+        logger.info(
+            f"HCS message submitted: topic={topic_id}, tx={transaction_id}, "
+            f"sequence={sequence_number}"
+        )
+
+        return {
+            "transaction_id": transaction_id,
+            "status": "SUCCESS",
+            "topic_id": topic_id,
+            "sequence_number": sequence_number,
+            "consensus_timestamp": consensus_timestamp,
+        }
+
+    async def get_topic_messages(
+        self,
+        topic_id: str,
+        since_sequence: int = 0,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """Return messages for an HCS topic.
+
+        In production this queries the Hedera mirror node REST API at
+        ``/topics/{topic_id}/messages``. When the mirror node is
+        unreachable we fall back to the in-memory submission log so e2e
+        flows that submit and then read in the same process work.
+
+        Args:
+            topic_id: HCS topic ID.
+            since_sequence: Only return messages with sequence_number > this.
+            limit: Maximum number of messages to return.
+
+        Returns:
+            Dict with ``messages`` — a list of items each containing
+            ``message`` (raw payload string), ``sequence_number`` (int),
+            and ``consensus_timestamp`` (str).
+        """
+        logger.info(
+            f"Querying HCS messages: topic={topic_id}, "
+            f"since_sequence={since_sequence}, limit={limit}"
+        )
+
+        try:
+            response = await self.http_client.get(
+                f"/topics/{topic_id}/messages",
+                params={"limit": limit, "order": "asc"},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                items = [
+                    m for m in data.get("messages", [])
+                    if int(m.get("sequence_number", 0)) > since_sequence
+                ]
+                if items:
+                    return {"messages": items[:limit]}
+            elif response.status_code == 404:
+                # Topic genuinely doesn't exist on the network — fall through
+                # to local log so in-process submissions are still visible.
+                pass
+        except httpx.RequestError as exc:
+            logger.warning(
+                f"Mirror node unavailable for HCS query: {exc}. "
+                "Falling back to in-memory topic log."
+            )
+
+        with self._hcs_sequence_lock:
+            log = list(self._hcs_topic_log.get(topic_id, []))
+
+        items = [m for m in log if m["sequence_number"] > since_sequence]
+        return {"messages": items[:limit]}
+
+    async def submit_topic_message(
+        self,
+        topic_id: str,
+        message: Any,
+    ) -> Dict[str, Any]:
+        """Alias of ``submit_hcs_message`` used by OpenConvAI/HCS-10 callers.
+
+        HCS topic submissions are the same underlying network operation;
+        the OpenConvAI services adopted ``submit_topic_message`` as their
+        caller-side name. Kept as a thin alias so both naming conventions
+        resolve to the same implementation.
+        """
+        return await self.submit_hcs_message(
+            topic_id=topic_id, message=message
+        )
 
     async def close(self):
         """Close the HTTP client connection."""

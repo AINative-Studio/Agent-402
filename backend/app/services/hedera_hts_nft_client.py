@@ -17,7 +17,6 @@ Refs #191, #192, #193, #194
 """
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -271,46 +270,15 @@ class HederaHTSNFTClient:
         """
         Submit a message to an HCS topic.
 
-        In production, this submits a TopicMessageSubmitTransaction.
-        The message is JSON-encoded before submission.
-
-        Args:
-            topic_id: Hedera Consensus Service topic ID
-            message: Message to submit (dict or str — dict is JSON-encoded)
-
-        Returns:
-            Dict with transaction_id, status
+        Delegates to ``HederaClient.submit_hcs_message`` so the receipt
+        contract — including ``sequence_number`` and
+        ``consensus_timestamp`` — stays consistent across NFT, DID,
+        HCS-14 and reputation callers (Refs #322, #327).
         """
-        if isinstance(message, dict):
-            message_str = json.dumps(message)
-        else:
-            message_str = str(message)
-
-        logger.info(
-            f"Submitting HCS message to topic={topic_id}, "
-            f"size={len(message_str)} bytes"
+        return await self.hedera_client.submit_hcs_message(
+            topic_id=topic_id,
+            message=message,
         )
-
-        # In production, use hedera-sdk-py:
-        # from hedera import TopicMessageSubmitTransaction, TopicId
-        # receipt = await (
-        #     TopicMessageSubmitTransaction()
-        #     .set_topic_id(TopicId.from_string(topic_id))
-        #     .set_message(message_str.encode("utf-8"))
-        #     .execute(client)
-        #     .get_receipt(client)
-        # )
-
-        transaction_id = self._generate_transaction_id()
-        logger.info(
-            f"HCS message submitted: topic={topic_id}, tx={transaction_id}"
-        )
-
-        return {
-            "transaction_id": transaction_id,
-            "status": "SUCCESS",
-            "topic_id": topic_id,
-        }
 
     async def get_hcs_messages(
         self,
