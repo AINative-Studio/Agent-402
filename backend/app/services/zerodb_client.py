@@ -306,6 +306,13 @@ class ZeroDBClient:
 
         POST /v1/public/zerodb/{project_id}/database/tables/{table_name}/query
         """
+        # Issue #328: In mock mode, no ZeroDB project exists to query against,
+        # so short-circuit with an empty result set before making any HTTP call.
+        # This keeps read-path endpoints (e.g. /marketplace/browse, /search)
+        # returning 200 locally instead of bubbling the upstream 404 as a 500.
+        if self._mock_mode:
+            return {"rows": [], "total": 0}
+
         payload = {
             "filter": filter,
             "limit": limit,
