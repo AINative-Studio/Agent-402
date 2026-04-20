@@ -328,16 +328,15 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
 
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            "Check that the server is responding at localhost:8000/.well-known/x402"
+            "Can you check that the Agent-402 server is up and ready for me to use?"
         )
 
     # Step 1: Create an agent
     step(1, "Create an agent via POST /v1/public/{project_id}/agents")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            "Help me create an agent using the Agent-402 API. "
-            "POST to /v1/public/{project_id}/agents with name 'my-consensus-agent', "
-            "role 'analyst', and description 'My first autonomous fintech agent on Hedera'."
+            "Create an autonomous finance agent called 'my-consensus-agent' for me — "
+            "it should act as an analyst and be my first autonomous fintech agent on Hedera."
         )
     t0 = time.time()
     ok, data, detail = api_post(
@@ -366,7 +365,7 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
     # Step 2: Retrieve the agent
     step(2, "Verify agent exists via GET /v1/public/{project_id}/agents/{agent_id}")
     if persona == "vibe-coder":
-        prompt_as_vibe_coder(f"Get my agent details using GET /v1/public/{{project_id}}/agents/{agent_id}")
+        prompt_as_vibe_coder("Show me my agent's details.")
     t0 = time.time()
     ok, data, detail = api_get(f"/v1/public/{PROJECT_ID}/agents/{agent_id}")
     passed = checkpoint(ok, "Agent retrievable by ID", detail)
@@ -385,8 +384,7 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
     step(4, "Register agent identity on Hedera HTS NFT (linked)")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            f"Register my agent on Hedera using POST /api/v1/hedera/identity/{agent_id}/register "
-            f"with capabilities [finance, compliance, payments]."
+            "Register my agent on Hedera — it should have finance, compliance, and payments capabilities."
         )
     t0 = time.time()
     ok, data, detail = api_post(
@@ -492,7 +490,7 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
     step(10, "Anchor memory to Hedera Consensus Service")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            f"Anchor my memory {memory_id} to Hedera HCS using POST /anchor/memory"
+            "Anchor my latest memory to the Hedera public ledger so it can't be tampered with."
         )
     t0 = time.time()
     import hashlib
@@ -528,8 +526,7 @@ def run_tutorial_02(result: TestResult, persona: str) -> None:
     step(1, "Create Hedera wallet for agent")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            "Create a Hedera wallet for my agent using "
-            "POST /v1/public/{project_id}/hedera/wallets with agent_id 'workshop-t02-agent'"
+            "Create a Hedera wallet for my agent so it can hold HBAR and USDC."
         )
     t0 = time.time()
     ok, data, detail = api_post(
@@ -554,8 +551,7 @@ def run_tutorial_02(result: TestResult, persona: str) -> None:
     step(2, "Associate USDC token with Hedera account")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            "Associate the USDC token with my wallet using "
-            "POST /v1/public/{project_id}/hedera/wallets/{account_id}/associate-usdc"
+            "Enable USDC on my agent's wallet so it can send and receive USDC payments."
         )
     t0 = time.time()
     if account_id:
@@ -585,8 +581,7 @@ def run_tutorial_02(result: TestResult, persona: str) -> None:
     step(4, "Execute USDC payment via Hedera HTS")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            "Send a USDC payment using POST /v1/public/{project_id}/hedera/payments "
-            "with amount 1000000 (1 USDC) to recipient 0.0.22222"
+            "Send 1 USDC from my agent's wallet to account 0.0.22222 as payment for a service."
         )
     t0 = time.time()
     ok, data, detail = api_post(
