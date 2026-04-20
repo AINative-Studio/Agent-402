@@ -67,6 +67,34 @@ def check_dir_exists(path: str) -> bool:
     return True
 
 
+def check_orchestrator_project_id_exists() -> bool:
+    """
+    Assert the project ID the E2E orchestrator points at actually exists in
+    the deterministic project store. Prevents regression of issue #330, where
+    the orchestrator pointed at a non-existent project and every project-
+    scoped endpoint 404'd.
+    """
+    # Source-of-truth store
+    from app.services.project_store import project_store
+
+    # Mirror the orchestrator's resolution precedence:
+    # WORKSHOP_PROJECT_ID env > hard-coded default.
+    # (The --project-id CLI flag only matters at runtime; env vars are what
+    # the smoke test can observe statically.)
+    default_project_id = "proj_demo_u1_001"
+    project_id = os.environ.get("WORKSHOP_PROJECT_ID", default_project_id)
+
+    project = project_store.get_by_id(project_id)
+    if project is None:
+        raise AssertionError(
+            f"Orchestrator project '{project_id}' not found in project_store. "
+            "Either add it to _initialize_demo_projects() in "
+            "backend/app/services/project_store.py, or set WORKSHOP_PROJECT_ID "
+            "to an existing project."
+        )
+    return True
+
+
 def main():
     print("=" * 60)
     print("  Agent-402 Workshop Smoke Test")
@@ -159,6 +187,11 @@ def main():
     # Section 6: FastAPI app loads
     print("[6/6] Checking FastAPI app loads...")
     results.append(check("FastAPI app imports", lambda: check_import("app.main")))
+    # Regression guard for issue #330: the E2E orchestrator's project must exist.
+    results.append(check(
+        "Orchestrator project ID exists in project_store",
+        check_orchestrator_project_id_exists,
+    ))
     print()
 
     # Summary
