@@ -652,7 +652,9 @@ class DescribeAnchorAndVerifyRoundTrip:
 
         submitted_messages: List[Dict[str, Any]] = []
 
-        async def fake_submit(message: Dict[str, Any]) -> Dict[str, Any]:
+        async def fake_submit(
+            topic_id: str, message: Dict[str, Any]
+        ) -> Dict[str, Any]:
             submitted_messages.append(message)
             return {"sequence_number": len(submitted_messages)}
 
@@ -696,7 +698,9 @@ class DescribeAnchorAndVerifyRoundTrip:
 
         submitted_messages: List[Dict[str, Any]] = []
 
-        async def fake_submit(message: Dict[str, Any]) -> Dict[str, Any]:
+        async def fake_submit(
+            topic_id: str, message: Dict[str, Any]
+        ) -> Dict[str, Any]:
             submitted_messages.append(message)
             return {"sequence_number": 1}
 
