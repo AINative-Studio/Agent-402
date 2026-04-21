@@ -1,22 +1,24 @@
 """
-Tests for HCS Anchoring Service (Issues #200, #201, #202, #203).
+Tests for HCS Anchoring Service (Issues #200, #201, #202, #203, #356).
 
 Covers:
 - Issue #200: Memory operation anchoring to HCS
 - Issue #201: Compliance event anchoring to HCS
 - Issue #202: Memory integrity verification against HCS anchors
 - Issue #203: Consolidation output anchoring to HCS
+- Issue #356: HCSAnchoringService passes topic_id to HederaClient.submit_hcs_message
 
 TDD Cycle: RED -> GREEN -> REFACTOR
 BDD-style: class DescribeX / def it_does_something
 
 Built by AINative Dev Team
-Refs #200, #201, #202, #203
+Refs #200, #201, #202, #203, #356
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 from typing import Optional, Dict, List, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -650,7 +652,9 @@ class DescribeAnchorAndVerifyRoundTrip:
 
         submitted_messages: List[Dict[str, Any]] = []
 
-        async def fake_submit(message: Dict[str, Any]) -> Dict[str, Any]:
+        async def fake_submit(
+            topic_id: str, message: Dict[str, Any]
+        ) -> Dict[str, Any]:
             submitted_messages.append(message)
             return {"sequence_number": len(submitted_messages)}
 
@@ -694,7 +698,9 @@ class DescribeAnchorAndVerifyRoundTrip:
 
         submitted_messages: List[Dict[str, Any]] = []
 
-        async def fake_submit(message: Dict[str, Any]) -> Dict[str, Any]:
+        async def fake_submit(
+            topic_id: str, message: Dict[str, Any]
+        ) -> Dict[str, Any]:
             submitted_messages.append(message)
             return {"sequence_number": 1}
 
@@ -725,3 +731,159 @@ class DescribeAnchorAndVerifyRoundTrip:
 
         assert result["verified"] is False
         assert result["match"] is False
+
+
+# ===========================================================================
+# Issue #356 — HCSAnchoringService passes topic_id to HederaClient
+# ===========================================================================
+
+class DescribeHCSAnchoringServiceTopicId:
+    """
+    Tests that HCSAnchoringService always passes ``topic_id`` to
+    ``HederaClient.submit_hcs_message`` (Issue #356).
+
+    The real ``HederaClient.submit_hcs_message`` signature is
+    ``submit_hcs_message(topic_id, message)``. Prior to #356 the service
+    called the client with only ``message=...``, causing Tutorial 01 Step
+    10 to fail with ``TypeError: submit_hcs_message() missing 1 required
+    positional argument: 'topic_id'``.
+    """
+
+    class DescribeAnchorMemory:
+        @pytest.mark.asyncio
+        async def it_passes_topic_id_from_constructor_to_client(self):
+            """Constructor-provided anchor_topic_id must reach the HCS client."""
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={
+                    "sequence_number": 42,
+                    "consensus_timestamp": "1700000000.000000000",
+                    "topic_id": "0.0.800042",
+                }
+            )
+            service = HCSAnchoringService(
+                hcs_client=mock_client, anchor_topic_id="0.0.800042"
+            )
+
+            await service.anchor_memory(
+                memory_id="m1",
+                agent_id="a1",
+                content_hash="abc",
+                namespace="default",
+            )
+
+            mock_client.submit_hcs_message.assert_called_once()
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.800042"
+
+        @pytest.mark.asyncio
+        async def it_defaults_topic_id_from_env_var_when_set(self):
+            """When ``HEDERA_ANCHOR_TOPIC_ID`` is set, use it."""
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={"sequence_number": 1}
+            )
+
+            with patch.dict(
+                os.environ, {"HEDERA_ANCHOR_TOPIC_ID": "0.0.777777"}, clear=False
+            ):
+                service = HCSAnchoringService(hcs_client=mock_client)
+                await service.anchor_memory(
+                    memory_id="m2",
+                    agent_id="a2",
+                    content_hash="def",
+                    namespace="default",
+                )
+
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.777777"
+
+        @pytest.mark.asyncio
+        async def it_falls_back_to_default_topic_id_when_env_unset(self):
+            """When no env var and no constructor arg, use sensible default."""
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={"sequence_number": 1}
+            )
+
+            env_without_topic = {
+                k: v for k, v in os.environ.items()
+                if k != "HEDERA_ANCHOR_TOPIC_ID"
+            }
+            with patch.dict(os.environ, env_without_topic, clear=True):
+                service = HCSAnchoringService(hcs_client=mock_client)
+                await service.anchor_memory(
+                    memory_id="m3",
+                    agent_id="a3",
+                    content_hash="ghi",
+                    namespace="default",
+                )
+
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.800001"
+
+        @pytest.mark.asyncio
+        async def it_still_passes_the_message_payload_alongside_topic_id(self):
+            """The message payload must remain intact alongside topic_id."""
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={"sequence_number": 9}
+            )
+            service = HCSAnchoringService(
+                hcs_client=mock_client, anchor_topic_id="0.0.800001"
+            )
+
+            await service.anchor_memory(
+                memory_id="m4",
+                agent_id="a4",
+                content_hash="jkl",
+                namespace="default",
+            )
+
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.800001"
+            assert kwargs["message"]["type"] == "memory_anchor"
+            assert kwargs["message"]["memory_id"] == "m4"
+
+    class DescribeAnchorComplianceEvent:
+        @pytest.mark.asyncio
+        async def it_passes_topic_id_on_compliance_anchor(self):
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={"sequence_number": 7}
+            )
+            service = HCSAnchoringService(
+                hcs_client=mock_client, anchor_topic_id="0.0.800099"
+            )
+
+            await service.anchor_compliance_event(
+                event_id="evt_topic",
+                event_type="KYC_CHECK",
+                classification="PASS",
+                risk_score=0.1,
+                agent_id="compliance_agent",
+            )
+
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.800099"
+
+    class DescribeAnchorConsolidation:
+        @pytest.mark.asyncio
+        async def it_passes_topic_id_on_consolidation_anchor(self):
+            mock_client = AsyncMock()
+            mock_client.submit_hcs_message = AsyncMock(
+                return_value={"sequence_number": 3}
+            )
+            service = HCSAnchoringService(
+                hcs_client=mock_client, anchor_topic_id="0.0.800222"
+            )
+
+            await service.anchor_consolidation(
+                consolidation_id="cons_topic",
+                synthesis_hash=_sha256("out"),
+                source_memory_ids=["m_a", "m_b"],
+                model_used="nous-codestral-22b",
+            )
+
+            kwargs = mock_client.submit_hcs_message.call_args.kwargs
+            assert kwargs["topic_id"] == "0.0.800222"

@@ -19,12 +19,17 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 from app.services.hedera_client import get_hedera_client
 
 logger = logging.getLogger(__name__)
+
+# Default HCS topic used when no env var or constructor arg is supplied.
+# Overridable via HEDERA_ANCHOR_TOPIC_ID.
+DEFAULT_ANCHOR_TOPIC_ID = "0.0.800001"
 
 
 # ---------------------------------------------------------------------------
@@ -107,15 +112,27 @@ class HCSAnchoringService:
         In production the lazy property uses `get_hedera_client()`.
     """
 
-    def __init__(self, hcs_client: Optional[Any] = None):
+    def __init__(
+        self,
+        hcs_client: Optional[Any] = None,
+        anchor_topic_id: Optional[str] = None,
+    ):
         """
         Initialise the anchoring service.
 
         Args:
             hcs_client: Optional HCS client instance. When None the service
                         creates one lazily via ``get_hedera_client()``.
+            anchor_topic_id: HCS topic ID to anchor messages to. When None,
+                        resolves from ``HEDERA_ANCHOR_TOPIC_ID`` env var, or
+                        ``DEFAULT_ANCHOR_TOPIC_ID`` as a final fallback.
         """
         self._hcs_client = hcs_client
+        self._anchor_topic_id = (
+            anchor_topic_id
+            or os.getenv("HEDERA_ANCHOR_TOPIC_ID")
+            or DEFAULT_ANCHOR_TOPIC_ID
+        )
 
     # ------------------------------------------------------------------
     # Internal: lazy client access
@@ -146,7 +163,10 @@ class HCSAnchoringService:
             HCSAnchoringError: When the HCS client raises any exception.
         """
         try:
-            return await self.hcs_client.submit_hcs_message(message=message)
+            return await self.hcs_client.submit_hcs_message(
+                topic_id=self._anchor_topic_id,
+                message=message,
+            )
         except HCSAnchoringError:
             raise
         except Exception as exc:
