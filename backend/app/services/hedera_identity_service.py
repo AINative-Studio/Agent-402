@@ -83,14 +83,19 @@ class HederaIdentityService:
     def __init__(
         self,
         nft_client: Optional[HederaHTSNFTClient] = None,
+        agent_lookup: Optional[Any] = None,
     ):
         """
         Initialize the Hedera Identity Service.
 
         Args:
             nft_client: Optional HTS NFT client (lazy-initialized if None)
+            agent_lookup: Optional async callable `(agent_id) -> Optional[Agent]`
+                used by register_for_existing_agent to resolve a stored agent.
+                Defaults to a lookup against AgentService when None.
         """
         self._nft_client = nft_client
+        self._agent_lookup = agent_lookup
 
     @property
     def nft_client(self) -> HederaHTSNFTClient:
@@ -320,6 +325,80 @@ class HederaIdentityService:
         )
 
     # ------------------------------------------------------------------
+    # Issue #346: Linked agent registration
+    # ------------------------------------------------------------------
+
+    async def register_for_existing_agent(
+        self,
+        agent_id: str,
+        capabilities: List[str],
+        name: Optional[str] = None,
+        role: Optional[str] = None,
+        token_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Attach a Hedera HTS NFT identity to an agent that already exists in
+        the project store.
+
+        Unlike :meth:`mint_agent_nft` (which is invoked by the standalone
+        /register endpoint and generates a fresh agent_id), this method
+        preserves the caller-supplied agent_id so the workshop's "create
+        agent" step (Tutorial 01 Step 1) and "register on Hedera" step
+        (Tutorial 01 Step 4) refer to the SAME agent record.
+
+        Args:
+            agent_id: The pre-existing agent identifier to link
+            capabilities: AAP capabilities to assign
+            name: Optional agent name override (defaults to the stored agent's name)
+            role: Optional agent role override (defaults to the stored agent's role)
+            token_id: Optional HTS token id to mint under
+
+        Returns:
+            Dict with agent_id (same as input), token_id, serial_number, did,
+            status, transaction_id.
+
+        Raises:
+            HederaIdentityError(404): if the agent_id does not exist in the store.
+        """
+        lookup = self._agent_lookup or _default_agent_lookup
+        existing = await lookup(agent_id)
+        if existing is None:
+            raise HederaIdentityError(
+                f"Agent '{agent_id}' not found. Create it first via "
+                f"POST /v1/public/{{project_id}}/agents.",
+                status_code=404,
+            )
+
+        effective_name = name or getattr(existing, "name", "")
+        effective_role = role or getattr(existing, "role", "")
+        effective_token_id = token_id or "0.0.pending"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        did = f"did:hedera:testnet:{agent_id}_pending"
+
+        metadata = {
+            "name": effective_name,
+            "role": effective_role,
+            "did": did,
+            "capabilities": capabilities,
+            "created_at": timestamp,
+            "status": "active",
+        }
+
+        mint_result = await self.mint_agent_nft(
+            token_id=effective_token_id,
+            agent_metadata=metadata,
+        )
+
+        return {
+            "agent_id": agent_id,
+            "token_id": mint_result["token_id"],
+            "serial_number": mint_result["serial_number"],
+            "did": did,
+            "status": mint_result["status"],
+            "transaction_id": mint_result.get("transaction_id"),
+        }
+
+    # ------------------------------------------------------------------
     # Issue #194: AAP Capability Mapping
     # ------------------------------------------------------------------
 
@@ -433,6 +512,37 @@ class HederaIdentityService:
             token_id=token_id, serial_number=serial_number
         )
         return capability in capabilities
+
+
+async def _default_agent_lookup(agent_id: str):
+    """
+    Default lookup used by ``register_for_existing_agent``.
+
+    Resolves an agent by id from the agents store (ZeroDB-backed in production,
+    in-memory mock store in dev/test). Returns ``None`` if the agent does not
+    exist so the caller can return a 404.
+
+    Refs #346
+    """
+    try:
+        from app.services.zerodb_client import get_zerodb_client
+        from app.services.agent_service import AGENTS_TABLE, _row_to_agent
+
+        client = get_zerodb_client()
+        result = await client.query_rows(
+            table_name=AGENTS_TABLE,
+            filter={"agent_id": agent_id},
+            limit=1,
+        )
+        rows = result.get("rows", [])
+        if not rows:
+            return None
+        return _row_to_agent(rows[0])
+    except Exception as exc:
+        logger.warning(
+            "Default agent lookup failed for %s: %s", agent_id, exc
+        )
+        return None
 
 
 # Global service instance

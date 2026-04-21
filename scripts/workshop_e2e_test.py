@@ -379,47 +379,71 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
     passed = checkpoint(ok, "Agent appears in list", detail)
     result.record(3, "List agents", passed, detail, time.time() - t0)
 
-    # Step 4: Register identity on Hedera
-    step(4, "Register agent identity on Hedera HTS NFT")
+    # Step 4: Register identity on Hedera (linked to existing agent_id from Step 1)
+    # Refs #346 — uses POST /api/v1/hedera/identity/{agent_id}/register so the
+    # Hedera HTS NFT identity is attached to the SAME agent created in Step 1.
+    step(4, "Register agent identity on Hedera HTS NFT (linked)")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
-            f"Register my agent on Hedera using POST /api/v1/hedera/identity/register "
-            f"with agent_id {agent_id} and capabilities [finance, compliance, payments]."
+            f"Register my agent on Hedera using POST /api/v1/hedera/identity/{agent_id}/register "
+            f"with capabilities [finance, compliance, payments]."
         )
     t0 = time.time()
     ok, data, detail = api_post(
-        "/api/v1/hedera/identity/register",
+        f"/api/v1/hedera/identity/{agent_id}/register",
         {
-            "agent_id": agent_id,
-            "agent_name": "my-consensus-agent",
             "capabilities": ["finance", "compliance", "payments"],
-            "role": "analyst",
         },
-        expected_status=200,
+        expected_status=201,
     )
     agent_did = None
     token_id = None
+    serial_number = None
     if ok and isinstance(data, dict):
-        agent_did = data.get("agent_did") or data.get("did")
+        agent_did = data.get("did") or data.get("agent_did")
         token_id = data.get("token_id")
+        serial_number = data.get("serial_number")
+        # Sanity check: response must echo the input agent_id.
+        if data.get("agent_id") and data["agent_id"] != agent_id:
+            ok = False
+            detail = (
+                f"agent_id mismatch: sent {agent_id}, got {data['agent_id']}"
+            )
     passed = checkpoint(
         ok,
-        "Hedera identity registered",
-        detail or f"token_id={token_id}, agent_did={agent_did}",
+        "Hedera identity registered (linked to agent from Step 1)",
+        detail or f"token_id={token_id}, did={agent_did}",
     )
-    result.record(4, "Register Hedera identity", passed, detail or f"token_id={token_id}", time.time() - t0)
+    result.record(
+        4,
+        "Register Hedera identity (linked)",
+        passed,
+        detail or f"token_id={token_id}, did={agent_did}",
+        time.time() - t0,
+    )
 
-    # Step 5: Resolve DID
+    # Step 5: Resolve DID — uses the same agent_id (cascade-fixed by #346)
     step(5, "Resolve agent DID")
     t0 = time.time()
     ok, data, detail = api_get(f"/api/v1/hedera/identity/{agent_id}/did")
     passed = checkpoint(ok, "Agent DID resolvable", detail)
     result.record(5, "Resolve DID", passed, detail, time.time() - t0)
 
-    # Step 6: Get capabilities
+    # Step 6: Get capabilities — token_id and serial_number from Step 4
+    # The capabilities endpoint requires token_id + serial_number as query params.
     step(6, "Get agent capabilities")
     t0 = time.time()
-    ok, data, detail = api_get(f"/api/v1/hedera/identity/{agent_id}/capabilities")
+    if token_id and serial_number is not None:
+        ok, data, detail = api_get(
+            f"/api/v1/hedera/identity/{agent_id}/capabilities"
+            f"?token_id={token_id}&serial_number={serial_number}"
+        )
+    else:
+        ok, data, detail = (
+            False,
+            None,
+            "No token_id/serial_number from Step 4",
+        )
     passed = checkpoint(ok, "Agent capabilities retrievable", detail)
     result.record(6, "Get capabilities", passed, detail, time.time() - t0)
 

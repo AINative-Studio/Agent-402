@@ -553,3 +553,195 @@ class DescribeDirectoryRegisterEndpoint:
 
         # HCS14DirectoryError inherits APIError which sets its own status code
         assert response.status_code in (400, 422, 500)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/hedera/identity/{agent_id}/register (Refs #346)
+# ---------------------------------------------------------------------------
+
+
+class DescribeRegisterExistingAgentEndpoint:
+    """
+    POST /api/v1/hedera/identity/{agent_id}/register links a Hedera identity
+    to an existing project agent rather than creating a disconnected one.
+
+    Refs #346
+    """
+
+    def it_returns_201_when_existing_agent_is_linked(self):
+        """Linked register returns 201 when the agent_id exists in the store."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        mock_service = AsyncMock()
+        mock_service.register_for_existing_agent.return_value = {
+            "agent_id": "agent_existing_123",
+            "token_id": "0.0.9999",
+            "serial_number": 1,
+            "did": "did:hedera:testnet:agent_existing_123_pending",
+            "status": "SUCCESS",
+            "transaction_id": "tx_link",
+        }
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/agent_existing_123/register",
+            json={"capabilities": ["finance", "compliance", "payments"]},
+        )
+
+        assert response.status_code == 201, response.text
+
+    def it_returns_same_agent_id_in_response(self):
+        """The response agent_id matches the one in the URL path (no new id created)."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        mock_service = AsyncMock()
+        mock_service.register_for_existing_agent.return_value = {
+            "agent_id": "agent_same_001",
+            "token_id": "0.0.9999",
+            "serial_number": 1,
+            "did": "did:hedera:testnet:agent_same_001_pending",
+            "status": "SUCCESS",
+            "transaction_id": "tx",
+        }
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/agent_same_001/register",
+            json={"capabilities": ["finance"]},
+        )
+
+        body = response.json()
+        assert body["agent_id"] == "agent_same_001"
+
+    def it_returns_404_when_agent_does_not_exist(self):
+        """Linked register returns 404 when the agent_id is not found in the store."""
+        from app.api.hedera_identity import get_hedera_identity_service
+        from app.services.hedera_identity_service import HederaIdentityError
+
+        mock_service = AsyncMock()
+        mock_service.register_for_existing_agent.side_effect = HederaIdentityError(
+            "Agent agent_missing not found", status_code=404
+        )
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/agent_missing/register",
+            json={"capabilities": ["finance"]},
+        )
+
+        assert response.status_code == 404
+
+    def it_does_not_require_name_or_role_in_body(self):
+        """Body with just capabilities is valid — name/role are pulled from the existing agent."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        mock_service = AsyncMock()
+        mock_service.register_for_existing_agent.return_value = {
+            "agent_id": "agent_only_caps",
+            "token_id": "0.0.9999",
+            "serial_number": 1,
+            "did": "did:hedera:testnet:agent_only_caps_pending",
+            "status": "SUCCESS",
+            "transaction_id": "tx",
+        }
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/agent_only_caps/register",
+            json={"capabilities": ["finance", "compliance", "payments"]},
+        )
+
+        assert response.status_code == 201, response.text
+
+    def it_passes_url_agent_id_to_the_service(self):
+        """The service receives the agent_id from the URL, not generated."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        mock_service = AsyncMock()
+        mock_service.register_for_existing_agent.return_value = {
+            "agent_id": "agent_passthrough",
+            "token_id": "0.0.1",
+            "serial_number": 1,
+            "did": "did:hedera:testnet:agent_passthrough_pending",
+            "status": "SUCCESS",
+            "transaction_id": None,
+        }
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        client.post(
+            "/api/v1/hedera/identity/agent_passthrough/register",
+            json={"capabilities": ["chat"]},
+        )
+
+        mock_service.register_for_existing_agent.assert_awaited_once()
+        kwargs = mock_service.register_for_existing_agent.call_args.kwargs
+        assert kwargs["agent_id"] == "agent_passthrough"
+        assert kwargs["capabilities"] == ["chat"]
+
+
+class DescribeStandaloneRegisterEndpointBackwardCompat:
+    """
+    Refs #346 — regression: the existing standalone /register endpoint must
+    keep working with `name` + `role` required (no breaking change).
+    """
+
+    def it_still_requires_name_and_role(self):
+        """Backward compat: standalone /register still 422s without name/role."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: AsyncMock()
+
+        client = TestClient(app)
+        # Missing both name and role
+        response = client.post(
+            "/api/v1/hedera/identity/register",
+            json={"capabilities": ["chat"], "token_id": "0.0.9999"},
+        )
+        assert response.status_code == 422
+
+    def it_still_creates_a_standalone_identity(self):
+        """Backward compat: standalone /register still mints with a generated agent_id."""
+        from app.api.hedera_identity import get_hedera_identity_service
+
+        mock_service = AsyncMock()
+        mock_service.mint_agent_nft.return_value = {
+            "serial_number": 1,
+            "token_id": "0.0.9999",
+            "transaction_id": "tx_standalone",
+            "status": "SUCCESS",
+        }
+
+        app = _make_test_app()
+        app.dependency_overrides[get_hedera_identity_service] = lambda: mock_service
+
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/hedera/identity/register",
+            json={
+                "name": "Backward Compat Agent",
+                "role": "analyst",
+                "capabilities": ["chat"],
+                "token_id": "0.0.9999",
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["agent_id"].startswith("agent_")
+        assert "token_id" in body

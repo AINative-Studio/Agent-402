@@ -582,3 +582,178 @@ class DescribeCheckCapability:
                 serial_number=1,
                 capability="fly_to_the_moon",
             )
+
+
+# ---------------------------------------------------------------------------
+# Issue #346: Linked agent registration (link Hedera identity to existing agent)
+# ---------------------------------------------------------------------------
+
+
+class DescribeRegisterForExistingAgent:
+    """
+    HederaIdentityService.register_for_existing_agent links a Hedera identity
+    to an existing project-store agent rather than creating a disconnected one.
+
+    Refs #346
+    """
+
+    @pytest.mark.asyncio
+    async def it_returns_the_same_agent_id_that_was_passed_in(self):
+        """The response agent_id matches the agent_id passed in (no new id minted)."""
+        from app.services.hedera_identity_service import HederaIdentityService
+
+        mock_nft = AsyncMock()
+        mock_nft.mint_nft.return_value = {
+            "serial_number": 1,
+            "token_id": "0.0.9999",
+            "transaction_id": "tx_mint_existing",
+            "status": "SUCCESS",
+        }
+
+        async def fake_lookup(agent_id):
+            return type("Agent", (), {
+                "id": agent_id,
+                "name": "existing-agent-name",
+                "role": "analyst",
+            })()
+
+        service = HederaIdentityService(
+            nft_client=mock_nft, agent_lookup=fake_lookup
+        )
+        result = await service.register_for_existing_agent(
+            agent_id="agent_existing_001",
+            capabilities=["chat", "memory"],
+            token_id="0.0.9999",
+        )
+
+        assert result["agent_id"] == "agent_existing_001"
+
+    @pytest.mark.asyncio
+    async def it_uses_existing_agent_name_and_role_when_not_provided(self):
+        """When name/role omitted, the service pulls them from the existing agent record."""
+        from app.services.hedera_identity_service import HederaIdentityService
+
+        mock_nft = AsyncMock()
+        mock_nft.mint_nft.return_value = {
+            "serial_number": 7,
+            "token_id": "0.0.4242",
+            "transaction_id": "tx",
+            "status": "SUCCESS",
+        }
+
+        async def fake_lookup(agent_id):
+            return type("Agent", (), {
+                "id": agent_id,
+                "name": "stored-agent-name",
+                "role": "compliance",
+            })()
+
+        service = HederaIdentityService(
+            nft_client=mock_nft, agent_lookup=fake_lookup
+        )
+        await service.register_for_existing_agent(
+            agent_id="agent_xyz",
+            capabilities=["compliance"],
+            token_id="0.0.4242",
+        )
+
+        # Inspect the metadata passed to mint_nft
+        call_kwargs = mock_nft.mint_nft.call_args.kwargs
+        metadata_bytes = call_kwargs["metadata_bytes"]
+        import json
+        decoded = json.loads(metadata_bytes.decode("utf-8"))
+        assert decoded["name"] == "stored-agent-name"
+        assert decoded["role"] == "compliance"
+
+    @pytest.mark.asyncio
+    async def it_raises_404_identity_error_when_agent_not_found(self):
+        """register_for_existing_agent raises HederaIdentityError(404) when agent unknown."""
+        from app.services.hedera_identity_service import (
+            HederaIdentityService,
+            HederaIdentityError,
+        )
+
+        async def fake_lookup(agent_id):
+            return None
+
+        service = HederaIdentityService(
+            nft_client=AsyncMock(), agent_lookup=fake_lookup
+        )
+        with pytest.raises(HederaIdentityError) as exc_info:
+            await service.register_for_existing_agent(
+                agent_id="agent_does_not_exist",
+                capabilities=["chat"],
+                token_id="0.0.9999",
+            )
+        assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def it_uses_provided_name_when_supplied(self):
+        """When name is explicitly provided, it overrides the stored agent name."""
+        from app.services.hedera_identity_service import HederaIdentityService
+
+        mock_nft = AsyncMock()
+        mock_nft.mint_nft.return_value = {
+            "serial_number": 1,
+            "token_id": "0.0.9999",
+            "transaction_id": "tx",
+            "status": "SUCCESS",
+        }
+
+        async def fake_lookup(agent_id):
+            return type("Agent", (), {
+                "id": agent_id,
+                "name": "stored-name",
+                "role": "analyst",
+            })()
+
+        service = HederaIdentityService(
+            nft_client=mock_nft, agent_lookup=fake_lookup
+        )
+        await service.register_for_existing_agent(
+            agent_id="agent_001",
+            capabilities=["chat"],
+            name="overridden-name",
+            token_id="0.0.9999",
+        )
+
+        import json
+        decoded = json.loads(
+            mock_nft.mint_nft.call_args.kwargs["metadata_bytes"].decode("utf-8")
+        )
+        assert decoded["name"] == "overridden-name"
+
+    @pytest.mark.asyncio
+    async def it_returns_token_id_serial_and_did_in_response(self):
+        """Response includes token_id, serial_number, did, status — same shape as /register."""
+        from app.services.hedera_identity_service import HederaIdentityService
+
+        mock_nft = AsyncMock()
+        mock_nft.mint_nft.return_value = {
+            "serial_number": 3,
+            "token_id": "0.0.7777",
+            "transaction_id": "tx_id",
+            "status": "SUCCESS",
+        }
+
+        async def fake_lookup(agent_id):
+            return type("Agent", (), {
+                "id": agent_id,
+                "name": "n",
+                "role": "r",
+            })()
+
+        service = HederaIdentityService(
+            nft_client=mock_nft, agent_lookup=fake_lookup
+        )
+        result = await service.register_for_existing_agent(
+            agent_id="agent_abc",
+            capabilities=["payment"],
+            token_id="0.0.7777",
+        )
+
+        assert result["token_id"] == "0.0.7777"
+        assert result["serial_number"] == 3
+        assert result["status"] == "SUCCESS"
+        assert "did" in result
+        assert result["did"].startswith("did:hedera:")

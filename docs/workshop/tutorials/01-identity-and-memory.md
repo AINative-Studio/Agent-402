@@ -82,29 +82,33 @@ This teaches you the API surface. Your AI will explain: create, list, get, updat
 
 Tell your AI:
 
-> "Register my agent on Hedera using `POST http://localhost:8000/api/v1/hedera/identity/register`. My agent_id is `{agent_id}`. Give it capabilities: `finance`, `compliance`, `payments`."
+> "Register my agent on Hedera using `POST http://localhost:8000/api/v1/hedera/identity/{agent_id}/register` — replace `{agent_id}` with the ID I saved in Step 1. Give it capabilities: `finance`, `compliance`, `payments`."
+
+> 💡 **Your `agent_id` from Step 1 is reused here.** This endpoint *links* a Hedera identity to the agent you already created — Step 1 and Step 4 refer to the SAME agent record. The response will echo back the same `agent_id`.
 
 **Request body example:**
 ```json
 {
-  "agent_id": "{agent_id}",
   "capabilities": ["finance", "compliance", "payments"]
 }
 ```
 
-✅ **You should see:**
+That's it — `name` and `role` are pulled from the agent you created in Step 1, so you don't need to repeat them.
+
+✅ **You should see** (note the `agent_id` matches the one from Step 1):
 ```json
 {
+  "agent_id": "agent_abc123...",
   "token_id": "0.0.XXXXX",
   "serial_number": 1,
-  "agent_did": "did:hedera:testnet:0.0.XXXXX_0.0.YYYYY",
-  "status": "registered"
+  "did": "did:hedera:testnet:agent_abc123..._pending",
+  "status": "SUCCESS"
 }
 ```
 
-📌 **Save your `agent_did`** — this is your agent's decentralized identity. It starts with `did:hedera:testnet:`.
+📌 **Save your `did`** — this is your agent's decentralized identity. It starts with `did:hedera:testnet:`.
 
-**Verification:** Your agent now has an HTS NFT on Hedera testnet. This NFT IS your agent's identity — portable, verifiable, revocable.
+**Verification:** Your agent now has an HTS NFT on Hedera testnet linked to the same `agent_id` you saw in Step 1. This NFT IS your agent's identity — portable, verifiable, revocable.
 
 ---
 
