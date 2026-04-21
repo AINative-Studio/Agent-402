@@ -257,6 +257,37 @@ class DirectoryRegisterResponse(BaseModel):
     directory_topic: str
 
 
+class LinkedAgentRegisterRequest(BaseModel):
+    """
+    Request body for POST /api/v1/hedera/identity/{agent_id}/register (Refs #346).
+
+    Used to attach a Hedera HTS NFT identity to an agent that already exists
+    in the project store (e.g. from POST /v1/public/{project_id}/agents).
+    `name` and `role` are optional — they default to the values stored on the
+    existing agent.
+    """
+    capabilities: List[str] = Field(
+        default_factory=list,
+        description="AAP capabilities to assign to this agent",
+    )
+    name: Optional[str] = Field(
+        default=None,
+        description="Optional override for agent name (defaults to existing agent's name)",
+    )
+    role: Optional[str] = Field(
+        default=None,
+        description="Optional override for agent role (defaults to existing agent's role)",
+    )
+    token_id: Optional[str] = Field(
+        default=None,
+        description="Existing HTS token ID to mint under; creates new class if omitted",
+    )
+    admin_key: Optional[str] = Field(
+        default=None,
+        description="Admin public key hex for new token class creation",
+    )
+
+
 class CapabilitiesUpdateRequest(BaseModel):
     """Request body for PUT /api/v1/hedera/identity/{agent_id}/capabilities."""
     token_id: str

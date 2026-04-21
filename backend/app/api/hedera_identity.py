@@ -33,6 +33,7 @@ from app.schemas.hedera_identity import (
     DirectoryRegisterResponse,
     DirectorySearchRequest,
     DIDResolutionResult,
+    LinkedAgentRegisterRequest,
 )
 from app.services.hedera_identity_service import (
     HederaIdentityError,
@@ -205,6 +206,61 @@ async def register_in_directory(
         transaction_id=result.get("transaction_id"),
         did=result.get("did", request.agent_did),
         directory_topic=directory_service.directory_topic_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/hedera/identity/{agent_id}/register (Refs #346)
+#
+# IMPORTANT: this route MUST be declared after `/directory/register` (above)
+# so FastAPI does not match POST /api/v1/hedera/identity/directory/register
+# as agent_id="directory". Routes are tried in registration order.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{agent_id}/register",
+    status_code=status.HTTP_201_CREATED,
+    response_model=AgentRegisterResponse,
+    responses={
+        201: {"description": "Hedera identity linked to existing agent"},
+        404: {"description": "Agent not found in project store"},
+        422: {"description": "Request schema validation failed"},
+        502: {"description": "Hedera network error"},
+    },
+    summary="Link Hedera HTS NFT identity to an existing agent",
+    description=(
+        "Attaches a Hedera HTS NFT identity to an agent that was previously "
+        "created via POST /v1/public/{project_id}/agents. The response "
+        "preserves the same agent_id, so Tutorial 01 Step 1 and Step 4 refer "
+        "to the SAME agent record. `name` and `role` are pulled from the "
+        "stored agent unless overridden in the request body. Refs #346."
+    ),
+)
+async def register_existing_agent(
+    agent_id: str,
+    request: LinkedAgentRegisterRequest,
+    identity_service: HederaIdentityService = Depends(get_hedera_identity_service),
+) -> AgentRegisterResponse:
+    """Link a Hedera HTS NFT identity to an existing project-store agent."""
+    try:
+        result = await identity_service.register_for_existing_agent(
+            agent_id=agent_id,
+            capabilities=request.capabilities,
+            name=request.name,
+            role=request.role,
+            token_id=request.token_id,
+        )
+    except HederaIdentityError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+    return AgentRegisterResponse(
+        agent_id=result["agent_id"],
+        token_id=result["token_id"],
+        serial_number=result["serial_number"],
+        did=result.get("did"),
+        status=result["status"],
+        transaction_id=result.get("transaction_id"),
     )
 
 
