@@ -47,7 +47,11 @@ except ImportError:
 
 # Configuration
 BASE_URL = os.environ.get("WORKSHOP_BASE_URL", "http://localhost:8000")
-PROJECT_ID = os.environ.get("WORKSHOP_PROJECT_ID", "proj_test_change_in_production")
+# Default to an existing deterministic demo project owned by user_1 (demo_key_user1_abc123).
+# The previous default ("proj_test_change_in_production") did not exist in the project store,
+# which caused every project-scoped endpoint to 404. See issue #330.
+DEFAULT_PROJECT_ID = "proj_demo_u1_001"
+PROJECT_ID = os.environ.get("WORKSHOP_PROJECT_ID", DEFAULT_PROJECT_ID)
 API_KEY = os.environ.get("WORKSHOP_API_KEY", "demo_key_user1_abc123")
 SERVER_STARTUP_TIMEOUT = 30  # seconds
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -273,25 +277,32 @@ def api_get(path: str, expected_status: int = 200) -> Tuple[bool, Any, str]:
 # ---------------------------------------------------------------------------
 
 
-def ensure_project_exists() -> bool:
-    """Create the test project if it doesn't exist. Returns True if usable."""
-    # Try to get the project first
-    ok, data, detail = api_get(f"/v1/public/projects/{PROJECT_ID}")
-    if ok:
-        return True
-    # Try to create it
-    ok, data, detail = api_post(
-        "/v1/public/projects",
-        {
-            "project_id": PROJECT_ID,
-            "name": "Workshop Test Project",
-            "description": "E2E test project for workshop orchestrator",
-            "tier": "free",
-            "database_enabled": True,
-        },
-        expected_status=201,
+def ensure_project_exists() -> Tuple[bool, str]:
+    """
+    Verify the configured PROJECT_ID is reachable for the current API key.
+
+    Agent-402 uses a deterministic project store (see app/services/project_store.py)
+    and does not expose POST /v1/public/projects to create projects at runtime.
+    Workshop mode also does not auto-provision new projects. So the orchestrator
+    verifies the project is listed for the authenticated user and fails fast with
+    a helpful message otherwise.
+
+    Returns (ok, detail).
+    """
+    ok, data, detail = api_get("/v1/public/projects")
+    if not ok:
+        return False, f"Could not list projects: {detail}"
+    if not isinstance(data, dict):
+        return False, f"Unexpected projects list shape: {str(data)[:200]}"
+    projects = data.get("projects") or []
+    ids = {p.get("id") for p in projects if isinstance(p, dict)}
+    if PROJECT_ID in ids:
+        return True, ""
+    return False, (
+        f"project '{PROJECT_ID}' is not visible to API key. "
+        f"Visible projects: {sorted(i for i in ids if i)}. "
+        "Override with --project-id or WORKSHOP_PROJECT_ID."
     )
-    return ok
 
 
 def run_tutorial_01(result: TestResult, persona: str) -> None:
@@ -307,9 +318,13 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
         say("Server not responding properly. Cannot continue.")
         return
 
-    # Setup: ensure test project exists
-    say("Ensuring test project exists (setup)")
-    ensure_project_exists()
+    # Setup: verify test project is reachable
+    say(f"Verifying test project '{PROJECT_ID}' is reachable")
+    proj_ok, proj_detail = ensure_project_exists()
+    if not proj_ok:
+        checkpoint(False, "Test project reachable", proj_detail)
+        result.record(0, "Test project reachable", False, proj_detail, 0.0)
+        return
 
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
@@ -480,34 +495,107 @@ def run_tutorial_01(result: TestResult, persona: str) -> None:
 def run_tutorial_02(result: TestResult, persona: str) -> None:
     banner("Tutorial 02: Payments & Trust")
 
-    # Step 1: Create wallet (Circle is the simpler test path)
-    step(1, "Create Circle wallet for agent")
+    # Tutorial 02 teaches Hedera wallets (not Circle). See docs/workshop/tutorials/02-payments-and-trust.md
+    # and issue #329. Circle wallet coverage lives in Tutorial 04 (both products are supported).
+
+    agent_id_for_wallet = "workshop-t02-agent"
+
+    # Step 1: Create Hedera wallet
+    step(1, "Create Hedera wallet for agent")
+    if persona == "vibe-coder":
+        prompt_as_vibe_coder(
+            "Create a Hedera wallet for my agent using "
+            "POST /v1/public/{project_id}/hedera/wallets with agent_id 'workshop-t02-agent'"
+        )
     t0 = time.time()
     ok, data, detail = api_post(
-        f"/v1/public/{PROJECT_ID}/circle/wallets",
+        f"/v1/public/{PROJECT_ID}/hedera/wallets",
         {
-            "agent_did": "did:key:z6MkWorkshopTest001",
-            "wallet_type": "EOA",
-            "blockchain": "ARC-TESTNET",
-            "description": "Workshop test wallet",
+            "agent_id": agent_id_for_wallet,
+            "initial_balance": 0,
         },
         expected_status=201,
     )
-    wallet_id = None
+    account_id: Optional[str] = None
     if ok and isinstance(data, dict):
-        wallet_id = data.get("wallet_id") or data.get("id")
-    passed = checkpoint(ok, "Circle wallet created", detail)
-    result.record(1, "Create wallet", passed, detail or f"wallet_id={wallet_id}", time.time() - t0)
+        account_id = data.get("account_id")
+    passed = checkpoint(
+        ok and account_id is not None,
+        "Hedera wallet created",
+        detail or f"account_id={account_id}",
+    )
+    result.record(1, "Create Hedera wallet", passed, detail or f"account_id={account_id}", time.time() - t0)
 
-    # Step 2: List wallets
-    step(2, "List Circle wallets")
+    # Step 2: Associate USDC with the Hedera account (required before USDC receipt)
+    step(2, "Associate USDC token with Hedera account")
+    if persona == "vibe-coder":
+        prompt_as_vibe_coder(
+            "Associate the USDC token with my wallet using "
+            "POST /v1/public/{project_id}/hedera/wallets/{account_id}/associate-usdc"
+        )
     t0 = time.time()
-    ok, data, detail = api_get(f"/v1/public/{PROJECT_ID}/circle/wallets")
-    passed = checkpoint(ok, "Wallets listable", detail)
-    result.record(2, "List wallets", passed, detail, time.time() - t0)
+    if account_id:
+        ok, data, detail = api_post(
+            f"/v1/public/{PROJECT_ID}/hedera/wallets/{account_id}/associate-usdc",
+            {},
+            expected_status=200,
+        )
+    else:
+        ok, data, detail = False, None, "No account_id from Step 1"
+    passed = checkpoint(ok, "USDC token associated", detail)
+    result.record(2, "Associate USDC", passed, detail, time.time() - t0)
 
-    # Step 3: x402 discovery
-    step(3, "Check x402 discovery for Hedera metadata")
+    # Step 2b: Get wallet balance (HBAR + USDC)
+    step(3, "Get Hedera wallet balance (HBAR + USDC)")
+    t0 = time.time()
+    if account_id:
+        ok, data, detail = api_get(
+            f"/v1/public/{PROJECT_ID}/hedera/wallets/{account_id}/balance"
+        )
+    else:
+        ok, data, detail = False, None, "No account_id from Step 1"
+    passed = checkpoint(ok, "Wallet balance retrievable", detail)
+    result.record(3, "Get wallet balance", passed, detail, time.time() - t0)
+
+    # Step 2c: Execute a USDC payment via HTS
+    step(4, "Execute USDC payment via Hedera HTS")
+    if persona == "vibe-coder":
+        prompt_as_vibe_coder(
+            "Send a USDC payment using POST /v1/public/{project_id}/hedera/payments "
+            "with amount 1000000 (1 USDC) to recipient 0.0.22222"
+        )
+    t0 = time.time()
+    ok, data, detail = api_post(
+        f"/v1/public/{PROJECT_ID}/hedera/payments",
+        {
+            "agent_id": agent_id_for_wallet,
+            "amount": 1_000_000,  # 1 USDC in smallest unit
+            "recipient": "0.0.22222",
+            "task_id": "workshop-t02-task",
+            "memo": "Workshop E2E payment test",
+        },
+        expected_status=201,
+    )
+    payment_tx_id: Optional[str] = None
+    if ok and isinstance(data, dict):
+        payment_tx_id = data.get("transaction_id")
+    passed = checkpoint(ok, "Hedera USDC payment created", detail)
+    result.record(4, "Create Hedera payment", passed, detail or f"transaction_id={payment_tx_id}", time.time() - t0)
+
+    # Step 2d: Verify the payment receipt on the mirror node
+    step(5, "Verify Hedera payment receipt on mirror node")
+    t0 = time.time()
+    if payment_tx_id:
+        ok, data, detail = api_get(
+            f"/v1/public/{PROJECT_ID}/hedera/payments/{payment_tx_id}/verify"
+        )
+    else:
+        ok, data, detail = False, None, "No transaction_id from payment step"
+    passed = checkpoint(ok, "Payment receipt verifiable", detail)
+    result.record(5, "Verify payment receipt", passed, detail, time.time() - t0)
+
+    # Step 6: x402 discovery sanity check (retained for Tutorial 02 curriculum)
+    step(6, "Check x402 discovery for Hedera metadata")
     t0 = time.time()
     ok, data, detail = api_get("/.well-known/x402")
     has_hedera = False
@@ -518,10 +606,10 @@ def run_tutorial_02(result: TestResult, persona: str) -> None:
         "x402 discovery includes Hedera metadata",
         detail or f"hedera_present={has_hedera}",
     )
-    result.record(3, "x402 Hedera discovery", passed, detail, time.time() - t0)
+    result.record(6, "x402 Hedera discovery", passed, detail, time.time() - t0)
 
-    # Step 4: Submit reputation feedback
-    step(4, "Submit reputation feedback")
+    # Step 7: Submit reputation feedback (matches Tutorial 02 §7-11)
+    step(7, "Submit reputation feedback")
     if persona == "vibe-coder":
         prompt_as_vibe_coder(
             "Submit reputation feedback for agent did:hedera:testnet:0.0.12345 "
@@ -541,28 +629,28 @@ def run_tutorial_02(result: TestResult, persona: str) -> None:
         expected_status=201,
     )
     passed = checkpoint(ok, "Feedback submitted", detail)
-    result.record(4, "Submit feedback", passed, detail, time.time() - t0)
+    result.record(7, "Submit feedback", passed, detail, time.time() - t0)
 
-    # Step 5: Get reputation score
-    step(5, "Get reputation score")
+    # Step 8: Get reputation score
+    step(8, "Get reputation score")
     t0 = time.time()
     ok, data, detail = api_get(f"/api/v1/hedera/reputation/{test_did}")
     passed = checkpoint(ok, "Reputation score calculated", detail)
-    result.record(5, "Get reputation", passed, detail, time.time() - t0)
+    result.record(8, "Get reputation", passed, detail, time.time() - t0)
 
-    # Step 6: Get feedback history
-    step(6, "Get feedback history")
+    # Step 9: Get feedback history
+    step(9, "Get feedback history")
     t0 = time.time()
     ok, data, detail = api_get(f"/api/v1/hedera/reputation/{test_did}/feedback")
     passed = checkpoint(ok, "Feedback history retrievable", detail)
-    result.record(6, "Feedback history", passed, detail, time.time() - t0)
+    result.record(9, "Feedback history", passed, detail, time.time() - t0)
 
-    # Step 7: Ranked agents
-    step(7, "List ranked agents")
+    # Step 10: Ranked agents
+    step(10, "List ranked agents")
     t0 = time.time()
     ok, data, detail = api_get("/api/v1/hedera/reputation/ranked")
     passed = checkpoint(ok, "Ranked agents listable", detail)
-    result.record(7, "Ranked agents", passed, detail, time.time() - t0)
+    result.record(10, "Ranked agents", passed, detail, time.time() - t0)
 
 
 # ---------------------------------------------------------------------------
@@ -684,16 +772,31 @@ def main() -> int:
         help="Tutorial to run (default: all)",
     )
     parser.add_argument(
+        "--project-id",
+        dest="project_id",
+        default=None,
+        help=(
+            "Project ID to run tutorials against. Overrides WORKSHOP_PROJECT_ID. "
+            f"Default: {DEFAULT_PROJECT_ID}"
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print what would happen, don't actually hit the server",
     )
     args = parser.parse_args()
 
+    # Precedence: --project-id > WORKSHOP_PROJECT_ID env > DEFAULT_PROJECT_ID
+    if args.project_id:
+        global PROJECT_ID
+        PROJECT_ID = args.project_id
+
     banner(f"Agent-402 Workshop E2E Test")
-    print(f"Persona:  {C.BOLD}{args.persona}{C.RESET}")
-    print(f"Tutorial: {C.BOLD}{args.tutorial}{C.RESET}")
-    print(f"Base URL: {BASE_URL}")
+    print(f"Persona:    {C.BOLD}{args.persona}{C.RESET}")
+    print(f"Tutorial:   {C.BOLD}{args.tutorial}{C.RESET}")
+    print(f"Base URL:   {BASE_URL}")
+    print(f"Project ID: {C.BOLD}{PROJECT_ID}{C.RESET}")
 
     if args.dry_run:
         say("Dry run mode — not actually testing")
