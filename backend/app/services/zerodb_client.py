@@ -233,7 +233,7 @@ class ZeroDBClient:
         """
         self.api_key = api_key or os.getenv("ZERODB_API_KEY")
         self.project_id = project_id or os.getenv("ZERODB_PROJECT_ID")
-        self.base_url = base_url or os.getenv("ZERODB_BASE_URL", "https://api.ainative.studio/v1/public")
+        self.base_url = base_url or os.getenv("ZERODB_BASE_URL", "https://api.ainative.studio/api/v1")
 
         # Allow client to work without credentials (will use mock storage)
         self._mock_mode = not (self.api_key and self.project_id)
@@ -250,9 +250,9 @@ class ZeroDBClient:
             "Content-Type": "application/json"
         }
 
-        # Construct base endpoint
-        self._db_base = f"{self.base_url}/zerodb/{self.project_id}/database"
-        self._embed_base = f"{self.base_url}/zerodb/{self.project_id}/embeddings"
+        # Construct base endpoint — production paths are /api/v1/projects/{id}/database
+        self._db_base = f"{self.base_url}/projects/{self.project_id}/database"
+        self._embed_base = f"{self.base_url}/projects/{self.project_id}/embeddings"
 
         if not self._mock_mode:
             logger.info(f"ZeroDBClient initialized for project {self.project_id}")
