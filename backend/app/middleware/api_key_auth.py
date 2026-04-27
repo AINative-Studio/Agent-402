@@ -64,6 +64,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         "/v1/public/embeddings/models",  # Public model listing for documentation
         "/v1/public/provision",  # Issue #363: wallet provisioning (public, no auth)
         "/v1/public/capabilities",  # Issue #363: capability manifest (public)
+        "/v1/public/pay",  # Refs #2584: stablecoin payment intake (public, no auth)
     }
 
     # Prefix for public API endpoints that require authentication

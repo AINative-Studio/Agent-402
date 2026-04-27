@@ -44,6 +44,8 @@ from app.api.projects import router as projects_router
 from app.api.auth import router as auth_router
 # Issue #363: Zero-human provisioning
 from app.api.provision import router as provision_router
+# Refs #2584: Stablecoin payment acceptance
+from app.api.pay import router as pay_router
 # Use full embeddings API with generate, embed-and-store, and search endpoints
 # Includes Issue #17 namespace scoping and Issue #23 search namespace parameter
 from app.api.embeddings import router as embeddings_router
@@ -539,6 +541,7 @@ async def health_check():
 # Include routers
 app.include_router(auth_router)
 app.include_router(provision_router)  # Issue #363: zero-human provisioning
+app.include_router(pay_router)  # Refs #2584: stablecoin payment acceptance
 app.include_router(projects_router)
 # Issue #79: embeddings_router must come first to handle single 'text' field properly
 # embeddings_router handles single text (text field), embed_store_router handles batch (documents field)
