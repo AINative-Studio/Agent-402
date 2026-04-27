@@ -16,6 +16,9 @@ transformers>=4.45.0
 # Cryptography for X402 DID signing
 ecdsa>=0.18.0
 
+# EVM wallet signature verification for /provision endpoint (Issue #363)
+eth-account>=0.11.0
+
 # Circle API entity secret encryption
 pycryptodome>=3.20.0
 

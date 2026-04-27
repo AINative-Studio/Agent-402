@@ -62,6 +62,8 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         "/v1/public/auth/login",  # Login endpoint doesn't require auth
         "/v1/public/auth/refresh",  # Refresh endpoint uses refresh token in body
         "/v1/public/embeddings/models",  # Public model listing for documentation
+        "/v1/public/provision",  # Issue #363: wallet provisioning (public, no auth)
+        "/v1/public/capabilities",  # Issue #363: capability manifest (public)
     }
 
     # Prefix for public API endpoints that require authentication
@@ -167,8 +169,16 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 }
                 return None
 
-            # Validate API key against known keys
+            # Validate API key — check static demo keys first, then dynamic store
             user_id = settings.get_user_id_from_api_key(api_key)
+            if not user_id and api_key.startswith("a402_"):
+                # Check dynamically-provisioned keys (wallet-provisioned or /keys endpoint)
+                try:
+                    from app.services.provision_service import get_provision_service
+                    user_id = await get_provision_service().validate_dynamic_key(api_key)
+                except Exception as _exc:
+                    logger.warning("Dynamic key lookup failed: %s", _exc)
+
             if user_id:
                 logger.debug(
                     f"Authenticated via X-API-Key: {path}",
