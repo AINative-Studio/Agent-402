@@ -90,15 +90,20 @@ class ProvisionService:
             # Table likely already exists — ignore
             pass
 
+    def _unwrap_row(self, row: dict) -> dict:
+        """Extract row_data from ZeroDB row envelope."""
+        return row.get("row_data", row)
+
     async def _lookup_key(self, api_key: str) -> Optional[dict]:
         client = self._get_client()
         try:
-            rows = await client.query_rows(
+            result = await client.query_rows(
                 PROVISIONED_KEYS_TABLE,
-                filters={"api_key": api_key, "is_active": True},
+                filter={"api_key": api_key, "is_active": True},
                 limit=1,
             )
-            return rows[0] if rows else None
+            rows = result.get("data", result) if isinstance(result, dict) else result
+            return self._unwrap_row(rows[0]) if rows else None
         except Exception as exc:
             logger.error("lookup_key error: %s", exc)
             return None
@@ -106,12 +111,13 @@ class ProvisionService:
     async def _lookup_by_wallet(self, wallet_address: str) -> Optional[dict]:
         client = self._get_client()
         try:
-            rows = await client.query_rows(
+            result = await client.query_rows(
                 PROVISIONED_KEYS_TABLE,
-                filters={"wallet_address": wallet_address.lower(), "is_active": True},
+                filter={"wallet_address": wallet_address.lower(), "is_active": True},
                 limit=1,
             )
-            return rows[0] if rows else None
+            rows = result.get("data", result) if isinstance(result, dict) else result
+            return self._unwrap_row(rows[0]) if rows else None
         except Exception as exc:
             logger.error("lookup_by_wallet error: %s", exc)
             return None
