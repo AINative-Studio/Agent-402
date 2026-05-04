@@ -3,7 +3,26 @@
 **Time:** ~50 minutes  
 **Goal:** Publish your agent, discover others, and coordinate a multi-agent workflow
 
-**Prerequisite:** Completed Tutorials 1 & 2 — you have `agent_id`, `agent_did`, and a payment history.
+## Prerequisites
+
+- Completed [Tutorial 1](01-identity-and-memory.md) and [Tutorial 2](02-payments-and-trust.md) — you have `agent_id`, `agent_did`, and a payment history
+- Server still running on `http://localhost:8000` with `WORKSHOP_MODE=true`
+
+If you closed your terminal since Tutorial 2, restart the server:
+
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
+
+Then verify:
+
+```bash
+curl http://localhost:8000/health
+# → {"status": "healthy"}
+```
+
+If the server is not running or `WORKSHOP_MODE=true` is missing from `.env`, see [SETUP.md](../SETUP.md).
 
 > New to Hedera terms? See the [Glossary](../GLOSSARY.md).
 

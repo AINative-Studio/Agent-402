@@ -3,11 +3,29 @@
 **Time:** ~50 minutes  
 **Goal:** Execute USDC payments on Hedera and build an on-chain reputation
 
-**Prerequisite:** Completed Tutorial 1 — you have an `agent_id` (e.g. `agent_abc123...`) and an `agent_did` (e.g. `did:hedera:testnet:0.0.XXXXX_0.0.YYYYY`).
+## Prerequisites
 
-> **Before you start:** Every URL containing `{project_id}` requires your `ZERODB_PROJECT_ID` from `.env`
-> (e.g. `proj_workshop`). See the [Vibe Coder Guide](../VIBE_CODER_GUIDE.md) if you haven't set this up.
-> New to Hedera terms? See the [Glossary](../GLOSSARY.md).
+- Completed [Tutorial 1: Identity & Memory](01-identity-and-memory.md) — you have an `agent_id` and an `agent_did`
+- Server still running on `http://localhost:8000` with `WORKSHOP_MODE=true`
+
+If you closed your terminal since Tutorial 1, restart the server:
+
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
+
+Then verify:
+
+```bash
+curl http://localhost:8000/health
+# → {"status": "healthy"}
+```
+
+If the server is not running or `WORKSHOP_MODE=true` is missing from `.env`, see [SETUP.md](../SETUP.md).
+
+> Every URL containing `{project_id}` requires your `ZERODB_PROJECT_ID` from `.env`
+> (e.g. `proj_workshop`). New to Hedera terms? See the [Glossary](../GLOSSARY.md).
 
 ---
 
