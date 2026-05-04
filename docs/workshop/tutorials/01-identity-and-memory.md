@@ -3,10 +3,31 @@
 **Time:** ~50 minutes  
 **Goal:** Create an agent with a Hedera identity and persistent, tamper-proof memory
 
-> **Before you start:** Make sure your server is running and your `ZERODB_PROJECT_ID` is set.
+## Prerequisites
+
+Complete **[SETUP.md](../SETUP.md)** before starting this tutorial. You need:
+
+- The backend server running on `http://localhost:8000`
+- `WORKSHOP_MODE=true` in your `.env` (otherwise all API calls return 404)
+- `WORKSHOP_DEFAULT_PROJECT_ID` set to your ZeroDB project ID
+- ZeroDB credentials (`ZERODB_API_KEY`, `ZERODB_PROJECT_ID`) in your `.env`
+
+**Quick check — run this before Step 1:**
+
+```bash
+curl http://localhost:8000/health
+# → {"status": "healthy"}
+```
+
+If you see `Connection refused`, start the server first:
+
+```bash
+cd backend
+uvicorn app.main:app --reload --port 8000
+```
+
 > Every URL in this tutorial contains `{project_id}` — replace it with the value of
 > `ZERODB_PROJECT_ID` from your `.env` file (e.g. `proj_workshop`).
-> See the [Vibe Coder Guide](../VIBE_CODER_GUIDE.md) for setup steps.
 > New to Hedera terms? See the [Glossary](../GLOSSARY.md).
 
 ---
