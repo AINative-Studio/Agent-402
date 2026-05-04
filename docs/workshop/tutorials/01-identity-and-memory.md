@@ -108,6 +108,8 @@ That's it — `name` and `role` are pulled from the agent you created in Step 1,
 
 📌 **Save your `did`** — this is your agent's decentralized identity. It starts with `did:hedera:testnet:`.
 
+> **Note — `_pending` suffix in workshop / mock mode:** In mock mode the server has no live Hedera connection, so no real token class is provisioned. The register endpoint substitutes the placeholder token ID `"0.0.pending"` and the DID-builder appends just the last segment of that string — producing `did:hedera:testnet:{agent_id}_pending`. This is the expected output in the workshop environment. A production deployment would supply a real `token_id` (e.g. `"0.0.456858"`) and the DID would instead read `did:hedera:testnet:{agent_id}_0.0.456858_1`. The `_pending` form is valid for the purposes of this tutorial. Refs #361.
+
 **Verification:** Your agent now has an HTS NFT on Hedera testnet linked to the same `agent_id` you saw in Step 1. This NFT IS your agent's identity — portable, verifiable, revocable.
 
 ---
@@ -121,6 +123,8 @@ Tell your AI:
 > 💡 **Which ID to use here?** Use the `agent_id` from Step 1 (the short `agent_abc123...` form), not the `agent_did` from Step 4. The path parameter `{agent_id}` means the ZeroDB agent ID, not the Hedera DID.
 
 ✅ **You should see:** A W3C DID Document with your agent's verification methods and service endpoints.
+
+> **Known issue in mock mode — HTTP 404 `DID not found`:** If Step 4 returned a `_pending` DID (see note above), the resolve endpoint will return a 404 because the resolve logic looks up the DID by the token-based key format (`did:hedera:testnet:{agent_id}_0.0.XXXXX_1`) rather than the `_pending` format stored in mock mode. This is a known mismatch tracked in #361. **You can continue to Step 6** — the 404 does not affect later steps. The code fix is in progress; the tutorial completes successfully at 10/11 steps in mock mode.
 
 **What this means:** Any system in the world can verify your agent's identity by resolving this DID. No central authority needed.
 
