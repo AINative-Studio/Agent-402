@@ -322,9 +322,9 @@ Finally, check the agent's cognitive profile:
 
 Tell your AI:
 
-> "Fetch the HCS audit trail for memory `{memory_id}` via `GET http://localhost:8000/anchor/{memory_id}/verify`. Return the HCS `topic_id` and `sequence_number`."
+> "Fetch the HCS audit trail for memory `{memory_id}` via `GET http://localhost:8000/anchor/{memory_id}/verify?current_content={memory_content}` — replace `{memory_id}` with the ID from Step 7 and `{memory_content}` with the exact content string you stored. Return the HCS `topic_id` and `sequence_number`."
 
-> ⚠️ **Note:** The anchor endpoint does **not** have an `/api/v1/` or `/v1/public/` prefix — use the path exactly as shown: `GET http://localhost:8000/anchor/{memory_id}/verify`.
+> ⚠️ **Note:** The anchor endpoint does **not** have an `/api/v1/` or `/v1/public/` prefix — use the path exactly as shown. The `current_content` query parameter is **required** — the endpoint returns 422 without it. Pass the exact content string from Step 7 so the server can hash it and compare against the HCS-recorded hash.
 
 ✅ **You should see:**
 ```json
